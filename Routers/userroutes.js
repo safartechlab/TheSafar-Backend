@@ -13,6 +13,5 @@ router.put("/updateduser/:id", updateuser);
 router.post("/login", login);
 router.get("/getuser/:id", getuserById);
 router.get("/getallusers", getallusers);
-//  router.post('/authverify', Auth , authverify);
 
 module.exports = router;

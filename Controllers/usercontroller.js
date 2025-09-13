@@ -77,14 +77,14 @@ const signup = async (req, res) => {
   email,
   "WELCOME TO SAFAR",
   `
-  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family: Arial, sans-serif; background:#f4f4f4; padding:30px 0;">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family: Arial, sans-serif; background:white; padding:30px 0;">
   <tr>
     <td align="center">
-      <table width="600" cellpadding="0" cellspacing="0" border="0" style="background:white; border-radius:8px; overflow:hidden; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+      <table width="600" cellpadding="0" cellspacing="0" border="0" style="background:#fdf4e5; border-radius:8px; overflow:hidden; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
         
         <!-- Header / Logo -->
         <tr>
-          <td style="background:#2563eb; color:white; padding:20px; text-align:center;">
+          <td style="background:#133547; color:#fdf4e5; padding:20px; text-align:center;">
             <h1 style="margin:0; font-size:24px;">Welcome to SAFAR STORE !!</h1>
           </td>
         </tr>
@@ -102,7 +102,7 @@ const signup = async (req, res) => {
             <p style="font-size:16px; margin:0 0 15px;">We’re absolutely thrilled to have you with us at <strong>Safar Store</strong>. Your journey towards amazing products starts here! 🎉</p>
             <p style="font-size:16px; margin:0 0 20px;">Click the button below to explore our latest collection and exclusive offers.</p>
             <p style="text-align:center; margin:30px 0;">
-              <a href="https://google.com" style="background:#2563eb; color:white; padding:14px 28px; text-decoration:none; border-radius:6px; font-weight:bold; font-size:16px; display:inline-block;">🛒 Start Shopping</a>
+              <a href="https://google.com" style="background:#133547; color:#fdf4e5; padding:14px 28px; text-decoration:none; border-radius:6px; font-weight:bold; font-size:16px; display:inline-block;">🛒 Start Shopping</a>
             </p>
           </td>
         </tr>
@@ -125,7 +125,7 @@ const signup = async (req, res) => {
 
         <!-- Footer -->
         <tr>
-          <td style="background:#f9fafb; padding:20px; text-align:center; font-size:13px; color:#666;">
+          <td style="background:#fdf4e5; padding:20px; text-align:center; font-size:13px; color:#666;">
             <p style="margin:0 0 10px;">Best Regards,<br/><strong>Safar Team</strong></p>
             <p style="margin:0;">📍410 Adinath Arcade, Adajan, Surat, Gujarat, India</p>
             <p style="margin:10px 0 0;">

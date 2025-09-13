@@ -72,9 +72,10 @@ const signup = async (req, res) => {
       address,
     });
 
+    
     await newUser.save();
      await Sendmail(
-      Email,
+      email,
       "Welcome to our website",
       "<a href='https://google.com'>Google</a>"
     );

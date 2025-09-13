@@ -1,6 +1,5 @@
 const nodemailer = require('nodemailer');
 const {EMAIL, PASSWORD} = require('./config');
-// const welcome.html = require("../Templates/welcome.html");
 
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
@@ -23,13 +22,11 @@ const Sendmail = async(to, subject, text, html) => {
 
     try{
          await transporter.sendMail(mailoptions);
-         return true;
     }
     catch(error){
         console.log(error);
-        return true;
     }
 
 }
 
-module.exports = Sendmail;
+module.exports = {Sendmail};

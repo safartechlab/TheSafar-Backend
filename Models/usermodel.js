@@ -35,6 +35,7 @@ const userSchema = new mongoose.Schema(
       state: { type: String },
       pincode: { type: Number },
     },
+     isVerified: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

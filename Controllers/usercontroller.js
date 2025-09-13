@@ -74,9 +74,9 @@ const signup = async (req, res) => {
 
     await newUser.save();
     await Sendmail(
-  email,
-  "WELCOME TO SAFAR",
-  `
+      email,
+      "WELCOME TO SAFAR",
+      `
   <table width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family: Arial, sans-serif; background:white; padding:30px 0;">
   <tr>
     <td align="center">
@@ -142,7 +142,7 @@ const signup = async (req, res) => {
 </table>
 
   `
-);
+    );
 
     res
       .status(201)

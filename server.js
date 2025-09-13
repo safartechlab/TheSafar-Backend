@@ -9,29 +9,27 @@ const catagoryrouter = require("./Routers/categoryroutes");
 app.use(cors());
 app.use(express.json());
 
+
 app.use("/user",userrouter);
-app.use("/category" ,catagoryrouter);
+app.use("/category",catagoryrouter);
 
-
-
-   const startServer = async () => {
+const startServer = async () => {
     try {
         const dbstatus = await connectDB();
         if (dbstatus) {
             app.listen(port, () => {
                 const now = new Date();
-                console.log(`Server is running on port ${port} at ${now.toLocaleString()}`);
+                console.log(`Server is running on port ${port} at ${now.toLocaleString()}`)
             });
         } else {
             console.error("Error in starting server");
-        }
+        } 
     } catch (error) {
         console.error("Error in starting server:", error);
     }
 };
 
-
-    startServer();
+startServer();
 
 
 

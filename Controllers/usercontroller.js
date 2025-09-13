@@ -2,6 +2,8 @@ const User = require("../Models/usermodel");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const Joi = require("joi");
+const { JWT_SECRET } = require("../Utilities/config");
+const { Sendmail } = require("../Utilities/nodemailer");
 
 const signupSchema = Joi.object({
   usertype: Joi.string().required(),
@@ -71,6 +73,11 @@ const signup = async (req, res) => {
     });
 
     await newUser.save();
+     await Sendmail(
+      Email,
+      "Welcome to our website",
+      "<a href='https://google.com'>Google</a>"
+    );
     res
       .status(201)
       .json({ message: "User registered successfully", data: newUser });
@@ -170,4 +177,11 @@ const getallusers = async (req, res) => {
   }
 };
 
-module.exports = { signup, login, updateuser, getuserById, getallusers };
+const authverify = async(req,res) => {
+  return res.status(200).json({
+    status: true,
+    data: { message: "User is authenticated", data: req.user },
+  });
+} 
+
+module.exports = { signup, login, updateuser, getuserById, getallusers,authverify };

@@ -1,10 +1,12 @@
 const {MONGODB_URL} = require('./config');
 const mongoose = require('mongoose');
+const User = require("../Controllers/usercontroller");
     
 const connectDB = async () => {
     try {
         await mongoose.connect(MONGODB_URL)
         console.log("MongoDB Connection Success");
+        User;
         return true;    
 
     } catch (error) {

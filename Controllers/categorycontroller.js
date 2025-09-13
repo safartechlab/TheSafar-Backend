@@ -4,24 +4,21 @@ const Joi = require("joi");
 
 const createCategorySchema = Joi.object({
   categoryname: Joi.string().min(2).required(),
-//   categoryimage: Joi.string().uri().required(),
 });
 
 const updateCategorySchema = Joi.object({
   categoryname: Joi.string().min(2).optional(),
-//   categoryimage: Joi.string().uri().optional(),
 });
 
 const createcategory = async (req, res) => {
 
-    console.log("Reached createcategory controller");
+    // console.log("Reached createcategory controller");
   try {
     const { error } = createCategorySchema.validate(req.body);
     if (error)
       return res.status(400).json({ message: error.details[0].message });
 
     const { categoryname} = req.body;
-
     const existingCategory = await Category.findOne({ categoryname });
     if (existingCategory) {
       return res.status(400).json({ message: "Category already exists" });

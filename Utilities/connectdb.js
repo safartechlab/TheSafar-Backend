@@ -18,8 +18,7 @@ const connectDB = async () => {
             
         }
         process.exit(1);
-        return false;
-        
+        return false; 
     }
     
 }

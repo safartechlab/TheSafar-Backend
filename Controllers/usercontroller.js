@@ -72,13 +72,78 @@ const signup = async (req, res) => {
       address,
     });
 
-    
     await newUser.save();
-     await Sendmail(
-      email,
-      "Welcome to our website",
-      "<a href='https://google.com'>Google</a>"
-    );
+    await Sendmail(
+  email,
+  "WELCOME TO SAFAR",
+  `
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family: Arial, sans-serif; background:#f4f4f4; padding:30px 0;">
+  <tr>
+    <td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" border="0" style="background:white; border-radius:8px; overflow:hidden; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+        
+        <!-- Header / Logo -->
+        <tr>
+          <td style="background:#2563eb; color:white; padding:20px; text-align:center;">
+            <h1 style="margin:0; font-size:24px;">Welcome to SAFAR STORE !!</h1>
+          </td>
+        </tr>
+
+        <!-- Hero Image -->
+        <tr>
+          <td style="text-align:center;">
+          </td>
+        </tr>
+
+        <!-- Main Content -->
+        <tr>
+          <td style="padding:25px; color:#333;">
+            <p style="font-size:18px; margin:0 0 10px;">Hello,</p>
+            <p style="font-size:16px; margin:0 0 15px;">We’re absolutely thrilled to have you with us at <strong>Safar Store</strong>. Your journey towards amazing products starts here! 🎉</p>
+            <p style="font-size:16px; margin:0 0 20px;">Click the button below to explore our latest collection and exclusive offers.</p>
+            <p style="text-align:center; margin:30px 0;">
+              <a href="https://google.com" style="background:#2563eb; color:white; padding:14px 28px; text-decoration:none; border-radius:6px; font-weight:bold; font-size:16px; display:inline-block;">🛒 Start Shopping</a>
+            </p>
+          </td>
+        </tr>
+
+        <!-- Divider -->
+        <tr>
+          <td style="padding:0 25px;">
+            <hr style="border:none; border-top:1px solid #e5e7eb; margin:20px 0;"/>
+          </td>
+        </tr>
+
+        <!-- Extra Info -->
+        <tr>
+          <td style="padding:0 25px 25px; color:#555; font-size:14px; line-height:1.6;">
+            <p>✅ Free delivery on orders above $50</p>
+            <p>✅ 24/7 Customer Support</p>
+            <p>✅ Hassle-free returns</p>
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="background:#f9fafb; padding:20px; text-align:center; font-size:13px; color:#666;">
+            <p style="margin:0 0 10px;">Best Regards,<br/><strong>Safar Team</strong></p>
+            <p style="margin:0;">📍410 Adinath Arcade, Adajan, Surat, Gujarat, India</p>
+            <p style="margin:10px 0 0;">
+              <a href="#" style="color:#2563eb; margin:0 8px; text-decoration:none;">Facebook</a> |
+              <a href="#" style="color:#2563eb; margin:0 8px; text-decoration:none;">Twitter</a> |
+              <a href="#" style="color:#2563eb; margin:0 8px; text-decoration:none;">Instagram</a>
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>
+
+  `
+);
+
     res
       .status(201)
       .json({ message: "User registered successfully", data: newUser });
@@ -178,11 +243,18 @@ const getallusers = async (req, res) => {
   }
 };
 
-const authverify = async(req,res) => {
+const authverify = async (req, res) => {
   return res.status(200).json({
     status: true,
     data: { message: "User is authenticated", data: req.user },
   });
-} 
+};
 
-module.exports = { signup, login, updateuser, getuserById, getallusers,authverify };
+module.exports = {
+  signup,
+  login,
+  updateuser,
+  getuserById,
+  getallusers,
+  authverify,
+};

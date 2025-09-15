@@ -7,6 +7,8 @@ const connectDB = require("./Utilities/connectdb");
 const userrouter = require("./Routers/userroutes");
 const catagoryrouter = require("./Routers/categoryroutes");
 const subcategoryrouter = require("./Routers/subcategoryroutes");
+const sizerouter = require("./Routers/sizeroutes");
+const productrouter = require("./Routers/productroutes");
 app.use(cors());
 app.use(express.json());
 
@@ -14,6 +16,8 @@ app.use(express.json());
 app.use("/user",userrouter);
 app.use("/category",catagoryrouter);
 app.use("/subcategory",subcategoryrouter);
+app.use("/size", sizerouter);
+app.use("/product",productrouter);
 
 
 const startServer = async () => {

@@ -6,12 +6,15 @@ const fs = require('fs');
 const connectDB = require("./Utilities/connectdb");
 const userrouter = require("./Routers/userroutes");
 const catagoryrouter = require("./Routers/categoryroutes");
+const subcategoryrouter = require("./Routers/subcategoryroutes");
 app.use(cors());
 app.use(express.json());
 
 
 app.use("/user",userrouter);
 app.use("/category",catagoryrouter);
+app.use("/subcategory",subcategoryrouter);
+
 
 const startServer = async () => {
     try {

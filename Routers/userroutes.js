@@ -8,6 +8,8 @@ const {
   getuserById,
   getallusers,
   authverify,
+  forgotPassword,
+  resetPassword 
 } = require("../Controllers/usercontroller");
 const Auth = require("../middleware/requireauth");
 
@@ -18,5 +20,7 @@ router.get("/getuser/:id", getuserById);
 router.get("/getallusers", getallusers);
 router.post("/authverify", Auth, authverify);
 router.post("/sendmail", mailsend);
+router.post("/forgotpassword", forgotPassword);
+router.post("/resetpassword", resetPassword);
 
 module.exports = router;

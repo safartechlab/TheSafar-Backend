@@ -4,6 +4,7 @@ const jwt = require("jsonwebtoken");
 const Joi = require("joi");
 const { JWT_SECRET } = require("../Utilities/config");
 const { Sendmail } = require("../Utilities/nodemailer");
+const crypto = require("crypto");
 
 const signupSchema = Joi.object({
   usertype: Joi.string().required(),
@@ -250,6 +251,92 @@ const authverify = async (req, res) => {
   });
 };
 
+// Forgot Password
+function generateOTP() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const otp = generateOTP();
+
+    user.resetPasswordOTP = otp;
+    user.resetPasswordExpires = Date.now() + 10 * 60 * 1000; // valid for 10 minutes
+    await user.save();
+
+    // Send OTP via email
+    await Sendmail(
+      user.email,
+      "Your Password Reset OTP",
+      `<p>Hello ${user.username},</p>
+       <p>Your OTP for password reset is:</p>
+       <h2>${otp}</h2>
+       <p>Valid for 10 minutes.</p>`
+    );
+
+    res.json({ message: "OTP sent to email" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Reset Password
+const resetPassword = async (req, res) => {
+  try {
+    const { email, otp, password } = req.body;
+
+    // ✅ Check required fields
+    if (!email || !otp || !password) {
+      return res
+        .status(400)
+        .json({ message: "Email, OTP, and password are required" });
+    }
+
+    // ✅ Find user with matching email + OTP + not expired
+    const user = await User.findOne({
+      email,
+      resetPasswordOTP: otp,
+      resetPasswordExpires: { $gt: Date.now() },
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: "Invalid or expired OTP" });
+    }
+
+    // ✅ Hash new password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // ✅ Update user fields
+    user.password = hashedPassword;
+    user.resetPasswordOTP = undefined;
+    user.resetPasswordExpires = undefined;
+
+    await user.save();
+    await Sendmail(
+      user.email,
+      "Password Reset Successful",
+      `
+      <h2>Hello ${user.username},</h2>
+      <p>Your password has been reset successfully. 🎉</p>
+      <p>If you did not perform this action, please contact our support team immediately.</p>
+      <br/>
+      <p>Best regards,<br/>Safar Team</p>
+      `
+    );
+
+    return res.status(200).json({ message: "Password reset successful" });
+  } catch (err) {
+    console.error("Reset Password Error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
 module.exports = {
   signup,
   login,
@@ -257,4 +344,6 @@ module.exports = {
   getuserById,
   getallusers,
   authverify,
+  forgotPassword,
+  resetPassword,
 };

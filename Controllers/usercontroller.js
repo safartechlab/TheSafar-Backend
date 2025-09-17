@@ -99,7 +99,7 @@ const signup = async (req, res) => {
         <!-- Main Content -->
         <tr>
           <td style="padding:25px; color:#333;">
-            <p style="font-size:18px; margin:0 0 10px;">Hello,</p>
+            <p style="font-size:18px; margin:0 0 10px;">Hello,{User.username}</p>
             <p style="font-size:16px; margin:0 0 15px;">We’re absolutely thrilled to have you with us at <strong>Safar Store</strong>. Your journey towards amazing products starts here! 🎉</p>
             <p style="font-size:16px; margin:0 0 20px;">Click the button below to explore our latest collection and exclusive offers.</p>
             <p style="text-align:center; margin:30px 0;">

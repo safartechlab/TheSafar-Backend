@@ -9,6 +9,7 @@ const catagoryrouter = require("./Routers/categoryroutes");
 const subcategoryrouter = require("./Routers/subcategoryroutes");
 const sizerouter = require("./Routers/sizeroutes");
 const productrouter = require("./Routers/productroutes");
+const cartrouter = require("./Routers/cartrouter");
 app.use(cors());
 app.use(express.json());
 
@@ -18,6 +19,7 @@ app.use("/category",catagoryrouter);
 app.use("/subcategory",subcategoryrouter);
 app.use("/size", sizerouter);
 app.use("/product",productrouter);
+app.use("/cart",cartrouter);
 
 
 const startServer = async () => {

@@ -132,7 +132,7 @@ const updateProduct = async (req, res) => {
   try {
     const sizes = parseJSON(req.body.sizes);
     const { error } = productSchema.update.validate({ ...req.body, sizes });
-    if (error) return res.status(400).json({ message: error.details[0].message });
+    if (error) return res.status(400).json({ message: error.details[0].message});
 
     await validateRefs(req.body.category, req.body.subcategory, sizes);
 

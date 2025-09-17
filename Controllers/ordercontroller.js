@@ -9,13 +9,15 @@ const moment = require("moment");
 const generateInvoice = (order) => {
   return new Promise((resolve, reject) => {
     try {
-      const invoiceDir = path.join(__dirname, "../invoices");
-      if (!fs.existsSync(invoiceDir)) fs.mkdirSync(invoiceDir, { recursive: true });
+      const invoiceDir = path.join(__dirname, "../Invoices");
+      if (!fs.existsSync(invoiceDir))
+        fs.mkdirSync(invoiceDir, { recursive: true });
 
-      const invoiceNumber = order.invoiceNumber || Math.floor(10000000 + Math.random() * 90000000);
-      const invoicePath = path.join(invoiceDir, `invoice-${invoiceNumber}.pdf`);
+      const invoiceNumber =
+        order.invoiceNumber || Math.floor(10000 + Math.random() * 90000);
+      const invoicePath = path.join(invoiceDir, `IN-${invoiceNumber}.pdf`);
       const doc = new PDFDocument({ margin: 50 });
-
+  
       const stream = fs.createWriteStream(invoicePath);
       doc.pipe(stream);
 
@@ -23,94 +25,137 @@ const generateInvoice = (order) => {
       const logoPath = path.join(__dirname, "../public/logo.png");
       if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 45, { width: 60 });
 
-      doc.fontSize(20).text("TheSafarStore", 120, 50, { bold: true });
+      // -------- Store Header --------
+      doc.rect(50, 40, 500, 40).fill("#1E3A8A"); // Dark blue background
+      doc.fillColor("#FFF").fontSize(20).text("TheSafarStore", 60, 50);
       doc
         .fontSize(10)
-        .text("GSTIN: 27AAACS1234Z1Z1", 120, 75)
-        .text("Email: support@safartechlab.com", 120, 90)
-        .text("Phone: +91-9876543210", 120, 105);
+        .text("GSTIN: 27AAACS1234Z1Z1", 300, 50)
+        .text("Email: support@safaronlinestore.com", 300, 62)
+        .text("Phone: +91-9876543210", 300, 74);
 
-      doc.moveDown(2);
-      doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-      doc.moveDown(1);
-
-      // -------- Invoice Header --------
-      doc
-        .fontSize(18)
-        .text("INVOICE", { align: "center", underline: true })
-        .moveDown(1);
-      doc
-        .fontSize(12)
-        .text(`Invoice No: ${invoiceNumber}`)
-        .text(`Date: ${moment(order.createdAt).format("DD/MM/YYYY")}`)
-        .text(`Payment Method: ${order.paymentMethod}`);
-
-      doc.moveDown(1.5);
+      doc.moveDown(2).fillColor("#000");
       doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke().moveDown(1);
 
-      doc.fontSize(14).text("Shipping Address", { underline: true }).moveDown(0.5);
-      const s = order.shippingAddress;
+      // -------- Invoice Header --------
+      doc.rect(50, doc.y, 500, 60).fill("#F3F4F6").stroke(); // Light gray box
+      doc
+        .fillColor("#000")
+        .fontSize(18)
+        .text("INVOICE", 50, doc.y + 5, { align: "center", underline: true });
       doc
         .fontSize(12)
-        .text(`${s.houseno || ""}, ${s.street || ""}`)
-        .text(`${s.city}, ${s.state}, ${s.pincode}`)
-        .text(`${s.country}`);
+        .text(`Invoice No: ${invoiceNumber}`, 60, doc.y + 30)
+        .text(
+          `Date: ${moment(order.createdAt).format("DD/MM/YYYY")}`,
+          250,
+          doc.y + 30
+        )
+        .text(`Payment Method: ${order.paymentMethod}`, 400, doc.y + 30);
+
+      doc.moveDown(4);
+
+      // -------- Shipping Address --------
+      doc
+        .fontSize(14)
+        .fillColor("#1E3A8A")
+        .text("Shipping Address", { underline: true });
+      const s = order.shippingAddress;
+      doc
+        .rect(50, doc.y + 5, 500, 70)
+        .fill("#F9FAFB")
+        .stroke();
+      doc
+        .fillColor("#000")
+        .fontSize(12)
+        .text(
+          `${s.houseno || ""}, ${s.street || ""}\n${s.city}, ${s.state}, ${
+            s.pincode
+          }\n${s.country}`,
+          60,
+          doc.y + 10
+        );
       if (s.landmark) doc.text(`Landmark: ${s.landmark}`);
       if (s.phone) doc.text(`Phone: ${s.phone}`);
 
-      doc.moveDown(2);
-      doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke().moveDown(1);
-      doc.fontSize(14).text("Order Details", { underline: true }).moveDown(0.5);
-      
+      // -------- Order Details Table --------
+      doc.moveDown(3);
       doc
-        .fontSize(12)
-        .text("S.No", 55, doc.y, { width: 40, align: "center" })
-        .text("Product", 100, doc.y, { width: 180 })
-        .text("Qty", 290, doc.y, { width: 50, align: "center" })
-        .text("Price", 360, doc.y, { width: 80, align: "right" })
-        .text("Total", 450, doc.y, { width: 90, align: "right" });
+        .fontSize(14)
+        .fillColor("#1E3A8A")
+        .text("Order Details", { underline: true })
+        .moveDown(0.5);
 
-      doc.moveDown(0.5);
+      // Table Header
+      doc.rect(50, doc.y, 500, 20).fill("#E5E7EB").stroke();
+      doc
+        .fillColor("#000")
+        .fontSize(12)
+        .text("S.No", 55, doc.y + 5, { width: 40, align: "center" })
+        .text("Product", 100, doc.y + 5, { width: 180 })
+        .text("Qty", 290, doc.y + 5, { width: 50, align: "center" })
+        .text("Price", 360, doc.y + 5, { width: 80, align: "right" })
+        .text("Total", 450, doc.y + 5, { width: 90, align: "right" });
+
+      doc.moveDown(2);
+
+      // Table Rows
       order.items.forEach((item, i) => {
         const total = item.price * item.quantity;
-        const rowY = doc.y + 3;
+        const rowY = doc.y;
 
-        if (i % 2 === 0) {
-          doc.rect(50, rowY - 2, 500, 20).fill("#F9FAFC").stroke();
-          doc.fillColor("#000");
-        }
-
+        // Alternate row colors
         doc
+          .rect(50, rowY, 500, 20)
+          .fill(i % 2 === 0 ? "#F9FAFC" : "#FFF")
+          .stroke();
+        doc
+          .fillColor("#000")
           .fontSize(11)
-          .text(i + 1, 55, rowY, { width: 40, align: "center" })
-          .text(`${item.productName || item.product.productName} (${item.sizeName || item.size?.name || "N/A"})`, 100, rowY, { width: 180 })
-          .text(item.quantity, 290, rowY, { width: 50, align: "center" })
-          .text(`₹${item.price}`, 360, rowY, { width: 80, align: "right" })
-          .text(`₹${total}`, 450, rowY, { width: 90, align: "right" });
+          .text(i + 1, 55, rowY + 5, { width: 40, align: "center" })
+          .text(
+            `${item.productName || item.product.productName} (${
+              item.sizeName || item.size?.name || "N/A"
+            })`,
+            100,
+            rowY + 5,
+            { width: 180 }
+          )
+          .text(item.quantity, 290, rowY + 5, { width: 50, align: "center" })
+          .text(`₹${item.price}`, 360, rowY + 5, { width: 80, align: "right" })
+          .text(`₹${total}`, 450, rowY + 5, { width: 90, align: "right" });
 
-        doc.moveDown(1.3);
+        doc.moveDown(2);
       });
 
-      doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke().moveDown(1);
-
-      // -------- Totals --------
+      // -------- Totals Section --------
+      doc.rect(350, doc.y, 200, 80).fill("#F3F4F6").stroke();
       doc
+        .fillColor("#000")
         .fontSize(12)
-        .text(`Subtotal: ₹${order.subtotal}`, 400, doc.y, { align: "right" })
-        .text(`Discount: ₹${order.discount || 0}`, 400, doc.y, { align: "right" })
-        .text(`Tax: ₹${order.tax || 0}`, 400, doc.y, { align: "right" })
+        .text(`Discount: ₹${order.discount || 0}`, 360, doc.y + 20)
+        .text(`Tax: ₹${order.tax || 0}`, 360, doc.y + 35)
         .fontSize(14)
-        .text(`Grand Total: ₹${order.totalPrice}`, 400, doc.y + 10, { align: "right", bold: true });
-
-      doc.moveDown(2);
-      doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke().moveDown(1.5);
+        .fillColor("#1E3A8A")
+        .text(`Grand Total: ₹${order.totalPrice}`, 360, doc.y + 55, {
+          bold: true,
+        });
 
       // -------- Footer --------
+      doc.moveDown(4);
+      doc.rect(50, doc.y, 500, 40).fill("#1E3A8A").stroke();
       doc
+        .fillColor("#FFF")
         .fontSize(11)
-        .fillColor("#555")
-        .text("Thank you for shopping with TheSafarStore!", { align: "center" })
-        .text("For any support, contact support@safartechlab.com", { align: "center" });
+        .text("Thank you for shopping with TheSafarStore!", 50, doc.y + 10, {
+          align: "center",
+        })
+        .text(
+          "For any support, contact support@safartechlab.com",
+          50,
+          doc.y + 25,
+          { align: "center" }
+        );
 
       doc.end();
 
@@ -141,11 +186,17 @@ const placeOrder = async (req, res) => {
     // Validate stock
     for (const item of cart.items) {
       if (!item.size)
-        return res.status(400).json({ message: `Size required for ${item.product.productName}` });
+        return res
+          .status(400)
+          .json({ message: `Size required for ${item.product.productName}` });
       if (item.quantity < 1)
-        return res.status(400).json({ message: `Invalid quantity for ${item.product.productName}` });
+        return res.status(400).json({
+          message: `Invalid quantity for ${item.product.productName}`,
+        });
       if (item.quantity > item.product.stock)
-        return res.status(400).json({ message: `Only ${item.product.stock} units left for ${item.product.productName}` });
+        return res.status(400).json({
+          message: `Only ${item.product.stock} units left for ${item.product.productName}`,
+        });
     }
 
     // Order items
@@ -159,7 +210,10 @@ const placeOrder = async (req, res) => {
     }));
 
     // Totals
-    const subtotal = orderItems.reduce((acc, i) => acc + i.price * i.quantity, 0);
+    const subtotal = orderItems.reduce(
+      (acc, i) => acc + i.price * i.quantity,
+      0
+    );
     const discount = 0;
     const tax = 0;
     const total = subtotal - discount + tax;
@@ -182,14 +236,21 @@ const placeOrder = async (req, res) => {
 
     // Update stock & clear cart
     for (const item of cart.items) {
-      await Product.findByIdAndUpdate(item.product._id, { $inc: { stock: -item.quantity } });
+      await Product.findByIdAndUpdate(item.product._id, {
+        $inc: { stock: -item.quantity },
+      });
     }
     await Cart.findOneAndUpdate({ user: userId }, { items: [] });
 
     // Generate invoice PDF
     const { invoicePath } = await generateInvoice(newOrder);
 
-    res.json({ message: "Order placed successfully", order: newOrder, invoicePath, invoiceNumber });
+    res.json({
+      message: "Order placed successfully",
+      order: newOrder,
+      invoicePath,
+      invoiceNumber,
+    });
   } catch (err) {
     console.error("Place Order Error:", err);
     res.status(500).json({ message: "Server error" });
@@ -279,7 +340,9 @@ const cancelOrder = async (req, res) => {
     if (order.user._id.toString() !== req.user.id)
       return res.status(403).json({ message: "Not authorized" });
     if (order.status === "Delivered")
-      return res.status(400).json({ message: "Delivered order cannot be cancelled" });
+      return res
+        .status(400)
+        .json({ message: "Delivered order cannot be cancelled" });
 
     order.status = "Cancelled";
     await order.save();

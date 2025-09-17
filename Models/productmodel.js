@@ -1,3 +1,4 @@
+const { required } = require("joi");
 const mongoose = require("mongoose");
 
 const productSchema = new mongoose.Schema(
@@ -24,6 +25,10 @@ const productSchema = new mongoose.Schema(
         price: Number,
       },
     ],
+    stock :{
+      type : Number,
+      required : true,
+    },
     price: {
       type: Number,
       min: [0, "Price cannot be negative"],

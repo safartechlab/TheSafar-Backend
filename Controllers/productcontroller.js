@@ -9,6 +9,7 @@ const productSchema = {
   create: Joi.object({
     productName: Joi.string().min(2).required(),
     gender: Joi.string().valid("Male", "Female", "Unisex").required(),
+    stock: Joi.string().required(),
     price: Joi.number().min(0).required(),
     discount: Joi.number().min(0).optional(),
     discountType: Joi.string().valid("Percentage", "Flat").optional(),
@@ -16,16 +17,19 @@ const productSchema = {
     review: Joi.string().optional(),
     category: Joi.string().length(24).hex().required(),
     subcategory: Joi.string().length(24).hex().required(),
-    sizes: Joi.array().items(
-      Joi.object({
-        size: Joi.string().length(24).hex().required(),
-        price: Joi.number().min(0).required(),
-      })
-    ).optional(),
+    sizes: Joi.array()
+      .items(
+        Joi.object({
+          size: Joi.string().length(24).hex().required(),
+          price: Joi.number().min(0).required(),
+        })
+      )
+      .optional(),
   }),
   update: Joi.object({
     productName: Joi.string().min(2).optional(),
     gender: Joi.string().valid("Male", "Female", "Unisex").optional(),
+    stock: Joi.string().required(),
     price: Joi.number().min(0).optional(),
     discount: Joi.number().min(0).optional(),
     discountType: Joi.string().valid("Percentage", "Flat").optional(),
@@ -33,12 +37,14 @@ const productSchema = {
     review: Joi.string().optional(),
     category: Joi.string().length(24).hex().optional(),
     subcategory: Joi.string().length(24).hex().optional(),
-    sizes: Joi.array().items(
-      Joi.object({
-        size: Joi.string().length(24).hex().required(),
-        price: Joi.number().min(0).required(),
-      })
-    ).optional(),
+    sizes: Joi.array()
+      .items(
+        Joi.object({
+          size: Joi.string().length(24).hex().required(),
+          price: Joi.number().min(0).required(),
+        })
+      )
+      .optional(),
   }),
 };
 
@@ -74,7 +80,8 @@ const addProduct = async (req, res) => {
   try {
     const sizes = parseJSON(req.body.sizes);
     const { error } = productSchema.create.validate({ ...req.body, sizes });
-    if (error) return res.status(400).json({ message: error.details[0].message });
+    if (error)
+      return res.status(400).json({ message: error.details[0].message });
 
     await validateRefs(req.body.category, req.body.subcategory, sizes);
 
@@ -108,7 +115,11 @@ const getAllProducts = async (req, res) => {
       .populate("sizes.size", "size")
       .sort({ createdAt: -1 });
 
-    res.json({ message: "Products fetched", count: products.length, data: products });
+    res.json({
+      message: "Products fetched",
+      count: products.length,
+      data: products,
+    });
   } catch (err) {
     res.status(500).json({ message: err.message || "Server error" });
   }
@@ -132,7 +143,8 @@ const updateProduct = async (req, res) => {
   try {
     const sizes = parseJSON(req.body.sizes);
     const { error } = productSchema.update.validate({ ...req.body, sizes });
-    if (error) return res.status(400).json({ message: error.details[0].message});
+    if (error)
+      return res.status(400).json({ message: error.details[0].message });
 
     await validateRefs(req.body.category, req.body.subcategory, sizes);
 
@@ -169,4 +181,10 @@ const deleteProduct = async (req, res) => {
   }
 };
 
-module.exports = { addProduct, getAllProducts, getProductById, updateProduct, deleteProduct };
+module.exports = {
+  addProduct,
+  getAllProducts,
+  getProductById,
+  updateProduct,
+  deleteProduct,
+};

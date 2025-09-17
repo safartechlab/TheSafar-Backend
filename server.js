@@ -10,6 +10,7 @@ const subcategoryrouter = require("./Routers/subcategoryroutes");
 const sizerouter = require("./Routers/sizeroutes");
 const productrouter = require("./Routers/productroutes");
 const cartrouter = require("./Routers/cartrouter");
+const orderrouter = require("./Routers/orderroutes");
 app.use(cors());
 app.use(express.json());
 
@@ -20,6 +21,7 @@ app.use("/subcategory",subcategoryrouter);
 app.use("/size", sizerouter);
 app.use("/product",productrouter);
 app.use("/cart",cartrouter);
+app.use("/order",orderrouter);
 
 
 const startServer = async () => {

@@ -4,8 +4,12 @@ const Product = require("../Models/productmodel");
 // Add item to cart
 const addToCart = async (req, res) => {
   try {
-    const { productId, quantity } = req.body;
+    const { productId, sizeId, quantity } = req.body; // sizeId is required
     const userId = req.user._id; // assuming auth middleware
+
+    if (!productId || !sizeId) {
+      return res.status(400).json({ message: "Product and size are required" });
+    }
 
     let cart = await Cart.findOne({ user: userId });
 
@@ -13,15 +17,21 @@ const addToCart = async (req, res) => {
       cart = new Cart({ user: userId, items: [] });
     }
 
-    // check if product already exists in cart
+    // check if product with same size already exists in cart
     const existingItem = cart.items.find(
-      (item) => item.product.toString() === productId
+      (item) =>
+        item.product.toString() === productId &&
+        item.size.toString() === sizeId
     );
 
     if (existingItem) {
       existingItem.quantity += quantity || 1;
     } else {
-      cart.items.push({ product: productId, quantity: quantity || 1 });
+      cart.items.push({
+        product: productId,
+        size: sizeId,
+        quantity: quantity || 1
+      });
     }
 
     await cart.save();

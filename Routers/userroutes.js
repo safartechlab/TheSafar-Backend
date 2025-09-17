@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const {mailsend}= require("../Controllers/mailcontroller");
+const { mailsend } = require("../Controllers/mailcontroller");
 const {
   signup,
   login,
@@ -9,9 +9,9 @@ const {
   getallusers,
   authverify,
   forgotPassword,
-  resetPassword 
+  resetPassword,
 } = require("../Controllers/usercontroller");
-const Auth = require("../middleware/requireauth");
+const { Auth } = require("../middleware/requireauth");
 
 router.post("/signup", signup);
 router.put("/updateduser/:id", updateuser);

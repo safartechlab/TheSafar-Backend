@@ -3,21 +3,19 @@ const { JWT_SECRET } = require("../Utilities/config.js");
 const User = require("../Models/usermodel");
 
 const Auth = async (req, res, next) => {
-  console.log(req.headers);
-
   try {
     let token = req.headers.authorization;
-
     if (!token) {
       return res.status(401).json({ message: "Token is empty" });
     }
-        if (token.startsWith("Bearer ")) {
+
+    if (token.startsWith("Bearer ")) {
       token = token.split(" ")[1];
     }
 
     const decoded = jwt.verify(token, JWT_SECRET);
-
     const dbuser = await User.findById(decoded.id);
+
     if (!dbuser) {
       return res.status(401).json({ message: "Unauthorized" });
     }
@@ -30,4 +28,11 @@ const Auth = async (req, res, next) => {
   }
 };
 
-module.exports = Auth;
+const adminMiddleware = (req, res, next) => {
+  if (req.user && req.user.usertype === "admin") {
+    return next();
+  }
+  return res.status(403).json({ message: "Access denied: Admin only" });
+};
+
+module.exports = { Auth, adminMiddleware };

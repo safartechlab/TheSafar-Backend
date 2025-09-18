@@ -10,7 +10,7 @@ const productSchema = {
     productName: Joi.string().min(2).required(),
     gender: Joi.string().valid("Male", "Female", "Unisex").required(),
     stock: Joi.number().min(0).optional(),
-    price: Joi.number().min(0).required(),
+    price: Joi.number().min(0).optional(),
     discount: Joi.number().min(0).optional(),
     discountType: Joi.string().valid("Percentage", "Flat").optional(),
     description: Joi.string().optional(),

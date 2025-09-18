@@ -20,7 +20,7 @@ const userSchema = new mongoose.Schema(
       required: true,
     },
     gender: {
-      type: String,
+      type: String, 
       required: true,
     },
     contactno: {

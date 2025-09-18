@@ -22,16 +22,17 @@ const productSchema = new mongoose.Schema(
     sizes: [
       {
         size: { type: mongoose.Schema.Types.ObjectId, ref: "Size" },
-        price: Number,
+        price: { type: Number, min: 0 },
+        stock: { type: Number, default: 0 },
       },
     ],
-    stock :{
-      type : Number,
-      required : true,
+    stock: {
+      type: Number,
+      default: 0,
     },
     price: {
       type: Number,
-      min: [0, "Price cannot be negative"],
+      min: 0,
     },
     discount: {
       type: Number,

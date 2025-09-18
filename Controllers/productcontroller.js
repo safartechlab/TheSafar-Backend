@@ -9,7 +9,7 @@ const productSchema = {
   create: Joi.object({
     productName: Joi.string().min(2).required(),
     gender: Joi.string().valid("Male", "Female", "Unisex").required(),
-    stock: Joi.string().required(),
+    stock: Joi.number().min(0).optional(),
     price: Joi.number().min(0).required(),
     discount: Joi.number().min(0).optional(),
     discountType: Joi.string().valid("Percentage", "Flat").optional(),
@@ -22,6 +22,7 @@ const productSchema = {
         Joi.object({
           size: Joi.string().length(24).hex().required(),
           price: Joi.number().min(0).required(),
+          stock: Joi.number().min(0).optional(),
         })
       )
       .optional(),
@@ -29,7 +30,7 @@ const productSchema = {
   update: Joi.object({
     productName: Joi.string().min(2).optional(),
     gender: Joi.string().valid("Male", "Female", "Unisex").optional(),
-    stock: Joi.string().required(),
+    stock: Joi.number().min(0).optional(),
     price: Joi.number().min(0).optional(),
     discount: Joi.number().min(0).optional(),
     discountType: Joi.string().valid("Percentage", "Flat").optional(),
@@ -42,6 +43,7 @@ const productSchema = {
         Joi.object({
           size: Joi.string().length(24).hex().required(),
           price: Joi.number().min(0).required(),
+          stock: Joi.number().min(0).optional(),
         })
       )
       .optional(),
@@ -76,6 +78,8 @@ const validateRefs = async (category, subcategory, sizes = []) => {
 };
 
 // ✅ Controller
+
+// Create Product
 const addProduct = async (req, res) => {
   try {
     const sizes = parseJSON(req.body.sizes);
@@ -107,6 +111,7 @@ const addProduct = async (req, res) => {
   }
 };
 
+// Get All Products
 const getAllProducts = async (req, res) => {
   try {
     const products = await Product.find()
@@ -125,6 +130,7 @@ const getAllProducts = async (req, res) => {
   }
 };
 
+// Get Product by ID
 const getProductById = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id)
@@ -139,6 +145,7 @@ const getProductById = async (req, res) => {
   }
 };
 
+// Update Product
 const updateProduct = async (req, res) => {
   try {
     const sizes = parseJSON(req.body.sizes);
@@ -171,6 +178,7 @@ const updateProduct = async (req, res) => {
   }
 };
 
+// Delete Product
 const deleteProduct = async (req, res) => {
   try {
     const deleted = await Product.findByIdAndDelete(req.params.id);

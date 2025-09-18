@@ -1,170 +1,206 @@
 const Order = require("../Models/ordermodel");
 const Cart = require("../Models/cartmodel");
 const Product = require("../Models/productmodel");
-const PDFDocument = require("pdfkit");
+const puppeteer = require("puppeteer");
 const fs = require("fs");
 const path = require("path");
 const moment = require("moment");
 
-const generateInvoice = (order) => {
-  return new Promise((resolve, reject) => {
-    try {
-      const invoiceDir = path.join(__dirname, "../Invoices");
-      if (!fs.existsSync(invoiceDir))
-        fs.mkdirSync(invoiceDir, { recursive: true });
+// ================== Generate Invoice with Puppeteer ==================
 
-      const invoiceNumber =
-        order.invoiceNumber || Math.floor(10000 + Math.random() * 90000);
-      const invoicePath = path.join(invoiceDir, `IN-${invoiceNumber}.pdf`);
-      const doc = new PDFDocument({ margin: 50 });
-  
-      const stream = fs.createWriteStream(invoicePath);
-      doc.pipe(stream);
+const generateInvoice = async (order) => {
+  const invoiceDir = path.join(__dirname, "../Invoices");
+  if (!fs.existsSync(invoiceDir)) fs.mkdirSync(invoiceDir, { recursive: true });
 
-      // -------- Company Header --------
-      const logoPath = path.join(__dirname, "../public/logo.png");
-      if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 45, { width: 60 });
+  const invoiceNumber =
+    order.invoiceNumber || Math.floor(10000 + Math.random() * 90000);
+  const invoicePath = path.join(invoiceDir, `IN-${invoiceNumber}.pdf`);
 
-      // -------- Store Header --------
-      doc.rect(50, 40, 500, 40).fill("#1E3A8A"); // Dark blue background
-      doc.fillColor("#FFF").fontSize(20).text("TheSafarStore", 60, 50);
-      doc
-        .fontSize(10)
-        .text("GSTIN: 27AAACS1234Z1Z1", 300, 50)
-        .text("Email: support@safaronlinestore.com", 300, 62)
-        .text("Phone: +91-9876543210", 300, 74);
+  // Build HTML Template (you can move this into a .ejs/.hbs file later)
+  const html = `
+<html>
+  <head>
+    <style>
+      body { font-family: 'Helvetica Neue', Arial, sans-serif; padding: 20px; background: #f9fafb; }
+      h1, h2, h3 { margin: 0; }
 
-      doc.moveDown(2).fillColor("#000");
-      doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke().moveDown(1);
+      /* Header */
+      .header { 
+        background: linear-gradient(90deg, #1E3A8A, #3B82F6); 
+        color: white; 
+        padding: 20px; 
+        border-radius: 8px; 
+        text-align: center; 
+      }
+      .header h2 { margin-bottom: 5px; font-size: 28px; }
+      .header p { margin: 0; font-size: 12px; }
 
-      // -------- Invoice Header --------
-      doc.rect(50, doc.y, 500, 60).fill("#F3F4F6").stroke(); // Light gray box
-      doc
-        .fillColor("#000")
-        .fontSize(18)
-        .text("INVOICE", 50, doc.y + 5, { align: "center", underline: true });
-      doc
-        .fontSize(12)
-        .text(`Invoice No: ${invoiceNumber}`, 60, doc.y + 30)
-        .text(
-          `Date: ${moment(order.createdAt).format("DD/MM/YYYY")}`,
-          250,
-          doc.y + 30
-        )
-        .text(`Payment Method: ${order.paymentMethod}`, 400, doc.y + 30);
+      /* Invoice Box */
+      .invoice-box { 
+        background: #fff; 
+        border-radius: 10px; 
+        padding: 25px; 
+        margin-top: 20px; 
+        box-shadow: 0 4px 10px rgba(0,0,0,0.08); 
+      }
+      .invoice-box h1 { 
+        color: #1E3A8A; 
+        text-align: center; 
+        margin-bottom: 20px; 
+        letter-spacing: 1px; 
+      }
 
-      doc.moveDown(4);
+      /* Shipping & Invoice Info */
+      .info { margin-bottom: 20px; font-size: 14px; line-height: 1.6; }
+      .info p { margin: 2px 0; }
+      .section-title { 
+        font-size: 16px; 
+        color: #1E3A8A; 
+        margin-top: 20px; 
+        margin-bottom: 10px; 
+        border-left: 4px solid #3B82F6; 
+        padding-left: 8px; 
+      }
 
-      // -------- Shipping Address --------
-      doc
-        .fontSize(14)
-        .fillColor("#1E3A8A")
-        .text("Shipping Address", { underline: true });
-      const s = order.shippingAddress;
-      doc
-        .rect(50, doc.y + 5, 500, 70)
-        .fill("#F9FAFB")
-        .stroke();
-      doc
-        .fillColor("#000")
-        .fontSize(12)
-        .text(
-          `${s.houseno || ""}, ${s.street || ""}\n${s.city}, ${s.state}, ${
-            s.pincode
-          }\n${s.country}`,
-          60,
-          doc.y + 10
-        );
-      if (s.landmark) doc.text(`Landmark: ${s.landmark}`);
-      if (s.phone) doc.text(`Phone: ${s.phone}`);
+      /* Table */
+      table { 
+        width: 100%; 
+        border-collapse: collapse; 
+        margin-top: 10px; 
+        border-radius: 6px; 
+        overflow: hidden; 
+      }
+      th { 
+        background: #1E3A8A; 
+        color: #fff; 
+        padding: 10px; 
+        font-size: 14px; 
+        text-transform: uppercase; 
+      }
+      td { 
+        border-bottom: 1px solid #e5e7eb; 
+        padding: 10px; 
+        font-size: 13px; 
+      }
+      tr:nth-child(even) td { background: #f3f4f6; }
 
-      // -------- Order Details Table --------
-      doc.moveDown(3);
-      doc
-        .fontSize(14)
-        .fillColor("#1E3A8A")
-        .text("Order Details", { underline: true })
-        .moveDown(0.5);
+      /* Totals */
+      .totals { 
+        margin-top: 20px; 
+        text-align: right; 
+        font-size: 15px; 
+      }
+      .totals p { margin: 4px 0; }
+      .totals h3 { 
+        color: #10B981; 
+        font-size: 20px; 
+        margin-top: 10px; 
+      }
 
-      // Table Header
-      doc.rect(50, doc.y, 500, 20).fill("#E5E7EB").stroke();
-      doc
-        .fillColor("#000")
-        .fontSize(12)
-        .text("S.No", 55, doc.y + 5, { width: 40, align: "center" })
-        .text("Product", 100, doc.y + 5, { width: 180 })
-        .text("Qty", 290, doc.y + 5, { width: 50, align: "center" })
-        .text("Price", 360, doc.y + 5, { width: 80, align: "right" })
-        .text("Total", 450, doc.y + 5, { width: 90, align: "right" });
+      /* Footer */
+      .footer { 
+        text-align: center; 
+        margin-top: 30px; 
+        font-size: 12px; 
+        color: #6b7280; 
+        padding: 10px; 
+        background: #f3f4f6; 
+        border-radius: 6px; 
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h2>TheSafarStore</h2>
+      <p>GSTIN: 27AAACS1234Z1Z1 | Email: support@safaronlinestore.com | Phone: +91-9876543210</p>
+    </div>
 
-      doc.moveDown(2);
+    <div class="invoice-box">
+      <h1>INVOICE</h1>
+      <div class="info">
+        <p><b>Invoice No:</b> ${invoiceNumber}</p>
+        <p><b>Date:</b> ${moment(order.createdAt).format("DD/MM/YYYY")}</p>
+        <p><b>Payment Method:</b> ${order.paymentMethod}</p>
+      </div>
 
-      // Table Rows
-      order.items.forEach((item, i) => {
-        const total = item.price * item.quantity;
-        const rowY = doc.y;
+      <h3 class="section-title">Shipping Address</h3>
+      <p class="info">
+        ${order.shippingAddress?.houseno || ""}, ${
+    order.shippingAddress?.street || ""
+  }<br/>
+        ${
+          order.shippingAddress?.landmark
+            ? order.shippingAddress.landmark + "<br/>"
+            : ""
+        }
+        ${order.shippingAddress?.city}, ${order.shippingAddress?.state}, ${
+    order.shippingAddress?.pincode
+  }<br/>
+        ${order.shippingAddress?.country}<br/>
+        ${
+          order.shippingAddress?.phone
+            ? "Phone: " + order.shippingAddress.phone
+            : ""
+        }
+      </p>
 
-        // Alternate row colors
-        doc
-          .rect(50, rowY, 500, 20)
-          .fill(i % 2 === 0 ? "#F9FAFC" : "#FFF")
-          .stroke();
-        doc
-          .fillColor("#000")
-          .fontSize(11)
-          .text(i + 1, 55, rowY + 5, { width: 40, align: "center" })
-          .text(
-            `${item.productName || item.product.productName} (${
-              item.sizeName || item.size?.name || "N/A"
-            })`,
-            100,
-            rowY + 5,
-            { width: 180 }
+      <h3 class="section-title">Order Details</h3>
+      <table>
+        <tr>
+          <th>S.No</th>
+          <th>Product</th>
+          <th>Size</th>
+          <th>Qty</th>
+          <th>Price</th>
+          <th>Total</th>
+        </tr>
+        ${order.items
+          .map(
+            (item, i) => `
+          <tr>
+            <td>${i + 1}</td>
+            <td>${item.productName || item.product?.productName}</td>
+            <td>${item.sizeName || item.size?.size || "N/A"}</td>
+            <td>${item.quantity}</td>
+            <td>₹${item.price}</td>
+            <td>₹${item.price * item.quantity}</td>
+          </tr>
+        `
           )
-          .text(item.quantity, 290, rowY + 5, { width: 50, align: "center" })
-          .text(`₹${item.price}`, 360, rowY + 5, { width: 80, align: "right" })
-          .text(`₹${total}`, 450, rowY + 5, { width: 90, align: "right" });
+          .join("")}
+      </table>
 
-        doc.moveDown(2);
-      });
+      <div class="totals">
+        <p>Discount: ₹${order.discount || 0}</p>
+        <p>Tax: ₹${order.tax || 0}</p>
+        <h3>Grand Total: ₹${order.totalPrice}</h3>
+      </div>
+    </div>
 
-      // -------- Totals Section --------
-      doc.rect(350, doc.y, 200, 80).fill("#F3F4F6").stroke();
-      doc
-        .fillColor("#000")
-        .fontSize(12)
-        .text(`Discount: ₹${order.discount || 0}`, 360, doc.y + 20)
-        .text(`Tax: ₹${order.tax || 0}`, 360, doc.y + 35)
-        .fontSize(14)
-        .fillColor("#1E3A8A")
-        .text(`Grand Total: ₹${order.totalPrice}`, 360, doc.y + 55, {
-          bold: true,
-        });
+    <div class="footer">
+      <p>Thank you for shopping with <b>TheSafarStore</b>!</p>
+      <p>For support, contact support@safartechlab.com</p>
+    </div>
+  </body>
+</html>
+`;
 
-      // -------- Footer --------
-      doc.moveDown(4);
-      doc.rect(50, doc.y, 500, 40).fill("#1E3A8A").stroke();
-      doc
-        .fillColor("#FFF")
-        .fontSize(11)
-        .text("Thank you for shopping with TheSafarStore!", 50, doc.y + 10, {
-          align: "center",
-        })
-        .text(
-          "For any support, contact support@safartechlab.com",
-          50,
-          doc.y + 25,
-          { align: "center" }
-        );
+  // Launch Puppeteer
+  const browser = await puppeteer.launch({ headless: "new" });
+  const page = await browser.newPage();
 
-      doc.end();
+  await page.setContent(html, { waitUntil: "networkidle0" });
 
-      stream.on("finish", () => resolve({ invoicePath, invoiceNumber }));
-      stream.on("error", (err) => reject(err));
-    } catch (err) {
-      reject(err);
-    }
+  // Save PDF
+  await page.pdf({
+    path: invoicePath,
+    format: "A4",
+    printBackground: true,
   });
+
+  await browser.close();
+
+  return { invoicePath, invoiceNumber };
 };
 
 // ================== Controllers ==================
@@ -178,7 +214,7 @@ const placeOrder = async (req, res) => {
     // Get cart
     const cart = await Cart.findOne({ user: userId })
       .populate("items.product", "productName price stock")
-      .populate("items.size", "name");
+      .populate("items.size", "size");
 
     if (!cart || cart.items.length === 0)
       return res.status(400).json({ message: "Cart is empty" });
@@ -206,7 +242,7 @@ const placeOrder = async (req, res) => {
       quantity: item.quantity,
       price: item.product.price,
       productName: item.product.productName,
-      sizeName: item.size.name,
+      sizeName: item.size.size,
     }));
 
     // Totals
@@ -221,7 +257,7 @@ const placeOrder = async (req, res) => {
     // Generate numeric invoice number
     const invoiceNumber = Math.floor(10000000 + Math.random() * 90000000);
 
-    // Save order with invoice number
+    // Save order
     const newOrder = await Order.create({
       user: userId,
       items: orderItems,
@@ -264,7 +300,7 @@ const downloadInvoice = async (req, res) => {
     const order = await Order.findById(orderId)
       .populate("user", "username email")
       .populate("items.product", "productName price")
-      .populate("items.size", "name");
+      .populate("items.size", "size"); // ✅ populate only the "size" field
 
     if (!order) return res.status(404).json({ message: "Order not found" });
 
@@ -282,7 +318,7 @@ const getUserOrders = async (req, res) => {
     const orders = await Order.find({ user: req.user.id })
       .select("items totalPrice status createdAt invoiceNumber")
       .populate("items.product", "productName price")
-      .populate("items.size", "name")
+      .populate("items.size", "size")
       .sort({ createdAt: -1 });
     res.json(orders);
   } catch (err) {
@@ -309,7 +345,7 @@ const getAllOrders = async (req, res) => {
   try {
     const orders = await Order.find()
       .populate("items.product", "productName price")
-      .populate("items.size", "name")
+      .populate("items.size", "size")
       .populate("user", "username email")
       .sort({ createdAt: -1 });
     res.json(orders);

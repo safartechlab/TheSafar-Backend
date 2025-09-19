@@ -4,12 +4,14 @@ const Joi = require("joi");
 // ✅ Validation Schemas
 const createsubcategorySchema = Joi.object({
   subcategory: Joi.string().min(2).required(),
-  categoryID: Joi.string().length(24).hex().required(),
+  category: Joi.string().length(24).hex().required(),
+  sizes: Joi.array().items(Joi.string().length(24).hex()).optional(),
 });
 
 const updatesubcategorySchema = Joi.object({
   subcategory: Joi.string().min(2).optional(),
-  categoryID: Joi.string().length(24).hex().optional(),
+  category: Joi.string().length(24).hex().optional(),
+  sizes: Joi.array().items(Joi.string().length(24).hex()).optional(),
 });
 
 // ✅ Create Subcategory
@@ -20,7 +22,7 @@ const createsubcategory = async (req, res) => {
       return res.status(400).json({ message: error.details[0].message });
     }
 
-    const { subcategory, categoryID } = req.body;
+    const { subcategory, category, sizes } = req.body;
 
     const existingSubcategory = await Subcategory.findOne({ subcategory });
     if (existingSubcategory) {
@@ -29,21 +31,28 @@ const createsubcategory = async (req, res) => {
 
     const newSubcategory = new Subcategory({
       subcategory,
-      categoryID,
+      category,
+      sizes,
     });
 
     await newSubcategory.save();
 
-    const populated = await newSubcategory.populate(
-      "categoryID",
-      "categoryname"
-    );
+    const populated = await newSubcategory.populate([
+      { path: "category", select: "categoryname" },
+      { path: "sizes", select: "sizename" },
+    ]); 
 
     res.status(201).json({
       message: "Subcategory created successfully",
       data: {
-        category: populated.categoryID?.categoryname || "Unknown",
+        _id: populated._id,
         subcategory: populated.subcategory,
+        category: populated.category?.categoryname || "Unknown",
+        categoryID: populated.category?._id || null,
+        sizes: populated.sizes?.map((s) => ({
+          _id: s._id,
+          sizename: s.sizename,
+        })),
       },
     });
   } catch (err) {
@@ -56,14 +65,19 @@ const createsubcategory = async (req, res) => {
 const getallsubCategories = async (req, res) => {
   try {
     const subcategories = await Subcategory.find()
-      .populate("categoryID", "categoryname")
+      .populate("category", "categoryname")
+      .populate("sizes", "sizename")
       .sort({ createdAt: -1 });
 
     const formatted = subcategories.map((sub) => ({
       _id: sub._id,
       subcategory: sub.subcategory,
-      categoryID: sub.categoryID?._id || null,
-      category: sub.categoryID?.categoryname || "Unknown",
+      categoryID: sub.category?._id || null,
+      category: sub.category?.categoryname || "Unknown",
+      sizes: sub.sizes?.map((s) => ({
+        _id: s._id,
+        sizename: s.sizename,
+      })),
     }));
 
     res.status(200).json({
@@ -80,10 +94,9 @@ const getallsubCategories = async (req, res) => {
 const getsubcategoryById = async (req, res) => {
   try {
     const { id } = req.params;
-    const subcategory = await Subcategory.findById(id).populate(
-      "categoryID",
-      "categoryname"
-    );
+    const subcategory = await Subcategory.findById(id)
+      .populate("category", "categoryname")
+      .populate("sizes", "sizename");
 
     if (!subcategory) {
       return res.status(404).json({ message: "Subcategory not found" });
@@ -94,8 +107,12 @@ const getsubcategoryById = async (req, res) => {
       data: {
         _id: subcategory._id,
         subcategory: subcategory.subcategory,
-        category: subcategory.categoryID?.categoryname || "Unknown",
-        categoryID: subcategory.categoryID?._id || null,
+        category: subcategory.category?.categoryname || "Unknown",
+        categoryID: subcategory.category?._id || null,
+        sizes: subcategory.sizes?.map((s) => ({
+          _id: s._id,
+          sizename: s.sizename,
+        })),
       },
     });
   } catch (err) {
@@ -122,20 +139,25 @@ const updatesubcategory = async (req, res) => {
         new: true,
         runValidators: true,
       }
-    ).populate("categoryID", "categoryname");
+    )
+      .populate("category", "categoryname")
+      .populate("sizes", "sizename");
 
     if (!updatedSubcategory) {
       return res.status(404).json({ message: "Subcategory not found" });
     }
 
-    // ✅ clean response
     res.status(200).json({
       message: "Subcategory updated successfully",
       data: {
         _id: updatedSubcategory._id,
         subcategory: updatedSubcategory.subcategory,
-        category: updatedSubcategory.categoryID?.categoryname || "Unknown",
-        categoryID: updatedSubcategory.categoryID?._id || null, // optional
+        category: updatedSubcategory.category?.categoryname || "Unknown",
+        categoryID: updatedSubcategory.category?._id || null,
+        sizes: updatedSubcategory.sizes?.map((s) => ({
+          _id: s._id,
+          sizename: s.sizename,
+        })),
       },
     });
   } catch (err) {
@@ -149,10 +171,9 @@ const deleteSubcategory = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const deletedSubcategory = await Subcategory.findByIdAndDelete(id).populate(
-      "categoryID",
-      "categoryname"
-    );
+    const deletedSubcategory = await Subcategory.findByIdAndDelete(id)
+      .populate("category", "categoryname")
+      .populate("sizes", "sizename");
 
     if (!deletedSubcategory) {
       return res.status(404).json({ message: "Subcategory not found" });
@@ -163,8 +184,12 @@ const deleteSubcategory = async (req, res) => {
       data: {
         _id: deletedSubcategory._id,
         subcategory: deletedSubcategory.subcategory,
-        category: deletedSubcategory.categoryID?.categoryname || "Unknown",
-        categoryID: deletedSubcategory.categoryID?._id || null,
+        category: deletedSubcategory.category?.categoryname || "Unknown",
+        categoryID: deletedSubcategory.category?._id || null,
+        sizes: deletedSubcategory.sizes?.map((s) => ({
+          _id: s._id,
+          sizename: s.sizename,
+        })),
       },
     });
   } catch (err) {

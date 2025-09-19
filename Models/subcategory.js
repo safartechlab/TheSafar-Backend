@@ -7,13 +7,13 @@ const subcategorySchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
-    categoryID:{
-        type : mongoose.Schema.Types.ObjectId,
-        ref:"Category"
-    }
+    category: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
+    },
+    sizes: [{ type: mongoose.Schema.Types.ObjectId, ref: "Size" }],
   },
   { timestamps: true }
-);  
+);
 
 module.exports = mongoose.model("Subcategory", subcategorySchema);
- 

@@ -50,10 +50,10 @@ const getCart = async (req, res) => {
     const cart = await Cart.findOne({ user: userId })
       .populate({
         path: "items.product",
-        select: "productName images sizes gender", // only these fields
+        select: "productName images sizes gender",
         populate: [
-          { path: "images", select: "filepath" },  // only filepath
-          { path: "sizes", select: "size price" }, // only size + price
+          { path: "images", select: "filepath" },  
+          { path: "sizes", select: "size price" }, 
         ],
       })
       .lean();

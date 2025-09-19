@@ -7,10 +7,6 @@ const sizeSchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
-    subcategoryID:{
-        type : mongoose.Schema.Types.ObjectId,
-        ref:"Subcategory"
-    }
   },
   { timestamps: true }
 );  

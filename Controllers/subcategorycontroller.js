@@ -38,7 +38,7 @@ const createsubcategory = async (req, res) => {
     await newSubcategory.save();
 
     const populated = await newSubcategory.populate([
-      { path: "category", select: "categoryname" },
+      { path: "category", select: "categoryname"},
       { path: "sizes", select: "sizename" },
     ]); 
 

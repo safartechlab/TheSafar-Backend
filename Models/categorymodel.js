@@ -6,13 +6,14 @@ const categorySchema = new mongoose.Schema(
       type: String,
       required: true,
       unique: true,
+      trim: true,
     },
     categoryimage: {
-      filename : String,
-      filepath : String
-    }
+      filename: String,
+      filepath: String,
+    },
   },
   { timestamps: true }
-);  
+);
 
 module.exports = mongoose.model("Category", categorySchema);

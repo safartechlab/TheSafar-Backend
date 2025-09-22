@@ -77,12 +77,30 @@ const validateRefs = async (category, subcategory, sizes = []) => {
   }
 };
 
+// Helper to calculate total stock
+const calculateStock = (sizes, topStock) => {
+  if (sizes && sizes.length > 0) {
+    return sizes.reduce((total, s) => total + (s.stock || 0), 0);
+  }
+  return topStock || 0;
+};
+
+// Helper to calculate min price (optional)
+const calculatePrice = (sizes, topPrice) => {
+  if (sizes && sizes.length > 0) {
+    return Math.min(...sizes.map((s) => s.price));
+  }
+  return topPrice || 0;
+};
+
 // ✅ Controller
 
 // Create Product
 const addProduct = async (req, res) => {
   try {
-    const sizes = parseJSON(req.body.sizes);
+    const sizes = parseJSON(req.body.sizes || "[]");
+
+    // Validate input
     const { error } = productSchema.create.validate({ ...req.body, sizes });
     if (error)
       return res.status(400).json({ message: error.details[0].message });
@@ -94,11 +112,20 @@ const addProduct = async (req, res) => {
       filepath: file.path,
     }));
 
-    const newProduct = await Product.create({
+    let newProductData = {
       ...req.body,
-      sizes,
       images,
-    });
+    };
+
+    if (sizes.length > 0) {
+      newProductData.sizes = sizes;
+      newProductData.stock = calculateStock(sizes); // calculate total stock from sizes
+      newProductData.price = calculatePrice(sizes); // optional: top-level price = min size price
+    } else {
+      newProductData.sizes = [];
+    }
+
+    const newProduct = await Product.create(newProductData);
 
     const populated = await Product.findById(newProduct._id)
       .populate("category", "categoryname")
@@ -106,6 +133,54 @@ const addProduct = async (req, res) => {
       .populate("sizes.size", "size");
 
     res.status(201).json({ message: "Product created", data: populated });
+  } catch (err) {
+    res.status(500).json({ message: err.message || "Server error" });
+  }
+};
+
+// Update Product
+const updateProduct = async (req, res) => {
+  try {
+    const sizes = parseJSON(req.body.sizes || "[]");
+
+    const { error } = productSchema.update.validate({ ...req.body, sizes });
+    if (error)
+      return res.status(400).json({ message: error.details[0].message });
+
+    await validateRefs(req.body.category, req.body.subcategory, sizes);
+
+    const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).json({ message: "Product not found" });
+
+    const newImages = (req.files || []).map((file) => ({
+      filename: file.filename,
+      filepath: file.path,
+    }));
+
+    // Merge existing sizes with updated sizes if provided
+    let updatedSizes = sizes.length > 0 ? sizes : product.sizes;
+
+    const updatedData = {
+      ...req.body,
+      sizes: updatedSizes,
+      images: [...product.images, ...newImages],
+      stock: calculateStock(updatedSizes, req.body.stock),
+      price: calculatePrice(updatedSizes, req.body.price),
+    };
+
+    const updated = await Product.findByIdAndUpdate(
+      req.params.id,
+      updatedData,
+      {
+        new: true,
+        runValidators: true,
+      }
+    )
+      .populate("category", "categoryname")
+      .populate("subcategory", "subcategory")
+      .populate("sizes.size", "size");
+
+    res.json({ message: "Product updated", data: updated });
   } catch (err) {
     res.status(500).json({ message: err.message || "Server error" });
   }
@@ -140,39 +215,6 @@ const getProductById = async (req, res) => {
 
     if (!product) return res.status(404).json({ message: "Product not found" });
     res.json({ message: "Product fetched", data: product });
-  } catch (err) {
-    res.status(500).json({ message: err.message || "Server error" });
-  }
-};
-
-// Update Product
-const updateProduct = async (req, res) => {
-  try {
-    const sizes = parseJSON(req.body.sizes);
-    const { error } = productSchema.update.validate({ ...req.body, sizes });
-    if (error)
-      return res.status(400).json({ message: error.details[0].message });
-
-    await validateRefs(req.body.category, req.body.subcategory, sizes);
-
-    const product = await Product.findById(req.params.id);
-    if (!product) return res.status(404).json({ message: "Product not found" });
-
-    const newImages = (req.files || []).map((file) => ({
-      filename: file.filename,
-      filepath: file.path,
-    }));
-
-    const updated = await Product.findByIdAndUpdate(
-      req.params.id,
-      { ...req.body, sizes, images: [...product.images, ...newImages] },
-      { new: true, runValidators: true }
-    )
-      .populate("category", "categoryname")
-      .populate("subcategory", "subcategory")
-      .populate("sizes.size", "size");
-
-    res.json({ message: "Product updated", data: updated });
   } catch (err) {
     res.status(500).json({ message: err.message || "Server error" });
   }

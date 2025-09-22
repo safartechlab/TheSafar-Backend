@@ -1,16 +1,23 @@
 const Size = require("../Models/sizemodel");
 const Joi = require("joi");
 
-// ✅ Validation Schemas
+// ✅ Joi Validation Schemas
 const createSizeSchema = Joi.object({
-  size: Joi.string().min(1).required(),
+  size: Joi.string().trim().min(1).max(20).required().messages({
+    "string.empty": "Size is required",
+    "string.min": "Size must be at least 1 character",
+    "string.max": "Size must be less than or equal to 20 characters",
+  }),
 });
 
 const updateSizeSchema = Joi.object({
-  size: Joi.string().min(1).optional(),
+  size: Joi.string().trim().min(1).max(20).messages({
+    "string.min": "Size must be at least 1 character",
+    "string.max": "Size must be less than or equal to 20 characters",
+  }),
 });
 
-// ✅ Create Size
+// ✅ Add Size
 const addSize = async (req, res) => {
   try {
     const { error } = createSizeSchema.validate(req.body);
@@ -22,7 +29,7 @@ const addSize = async (req, res) => {
 
     const existingSize = await Size.findOne({ size });
     if (existingSize) {
-      return res.status(400).json({ message: "Size already exists" });
+      return res.status(409).json({ message: "Size already exists" });
     }
 
     const newSize = new Size({ size });
@@ -33,8 +40,8 @@ const addSize = async (req, res) => {
       data: newSize,
     });
   } catch (err) {
-    console.error("Error:", err);
-    res.status(500).json({ message: "Server error" });
+    console.error("Add Size Error:", err);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -48,8 +55,8 @@ const getAllSizes = async (req, res) => {
       data: sizes,
     });
   } catch (err) {
-    console.error("Error:", err);
-    res.status(500).json({ message: "Server error" });
+    console.error("Get Sizes Error:", err);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -57,8 +64,8 @@ const getAllSizes = async (req, res) => {
 const getSizeById = async (req, res) => {
   try {
     const { id } = req.params;
-    const size = await Size.findById(id);
 
+    const size = await Size.findById(id);
     if (!size) {
       return res.status(404).json({ message: "Size not found" });
     }
@@ -68,8 +75,8 @@ const getSizeById = async (req, res) => {
       data: size,
     });
   } catch (err) {
-    console.error("Error:", err);
-    res.status(500).json({ message: "Server error" });
+    console.error("Get Size By ID Error:", err);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -82,11 +89,18 @@ const updateSize = async (req, res) => {
     }
 
     const { id } = req.params;
+    const { size } = req.body;
 
-    const updatedSize = await Size.findByIdAndUpdate(id, req.body, {
-      new: true,
-      runValidators: true,
-    });
+    const existingSize = await Size.findOne({ size });
+    if (existingSize && existingSize._id.toString() !== id) {
+      return res.status(409).json({ message: "Size already exists" });
+    }
+
+    const updatedSize = await Size.findByIdAndUpdate(
+      id,
+      { size },
+      { new: true, runValidators: true }
+    );
 
     if (!updatedSize) {
       return res.status(404).json({ message: "Size not found" });
@@ -97,8 +111,8 @@ const updateSize = async (req, res) => {
       data: updatedSize,
     });
   } catch (err) {
-    console.error("Error:", err);
-    res.status(500).json({ message: "Server error" });
+    console.error("Update Size Error:", err);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -108,7 +122,6 @@ const deleteSize = async (req, res) => {
     const { id } = req.params;
 
     const deletedSize = await Size.findByIdAndDelete(id);
-
     if (!deletedSize) {
       return res.status(404).json({ message: "Size not found" });
     }
@@ -118,11 +131,12 @@ const deleteSize = async (req, res) => {
       data: deletedSize,
     });
   } catch (err) {
-    console.error("Error:", err);
-    res.status(500).json({ message: "Server error" });
+    console.error("Delete Size Error:", err);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 
+// ✅ Exports
 module.exports = {
   addSize,
   getAllSizes,

@@ -12,7 +12,7 @@ const generateInvoice = async (order) => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
   const invoiceNumber =
-    order.invoiceNumber || Math.floor(10000000 + Math.random() * 90000000);
+    order.invoiceNumber || Math.floor(10000 + Math.random() * 90000);
   const filePath = path.join(dir, `IN-${invoiceNumber}.pdf`);
 
   const html = `
@@ -28,7 +28,7 @@ const generateInvoice = async (order) => {
   <body>
     <div class="header"><h2>TheSafarStore</h2></div>
     <div class="invoice">
-      <h3>Invoice #${invoiceNumber}</h3>
+      <h3>Invoice No :   ${invoiceNumber}</h3>
       <p>Date: ${moment(order.createdAt).format("DD/MM/YYYY")}</p>
       <p>Payment: ${order.paymentMethod}</p>
       <h4>Shipping Address</h4>
@@ -70,112 +70,200 @@ const generateInvoice = async (order) => {
 };
 
 // ================== Controllers ==================
+
+// Place Order
 const placeOrder = async (req, res) => {
   try {
-    const cart = await Cart.findOne({ user: req.user.id })
-      .populate("items.product", "productName price stock")
-      .populate("items.size", "size");
+    const cart = await Cart.findOne({ user: req.user.id }).populate(
+      "items.product",
+      "productName price stock sizes"
+    );
+
     if (!cart || !cart.items.length)
       return res.status(400).json({ message: "Cart is empty" });
 
+    // Build order items
+    const items = [];
     for (const it of cart.items) {
-      if (!it.size)
-        return res
-          .status(400)
-          .json({ message: `Size required for ${it.product.productName}` });
-      if (it.quantity > it.product.stock)
-        return res
-          .status(400)
-          .json({
-            message: `Only ${it.product.stock} left for ${it.product.productName}`,
+      const product = it.product;
+
+      let selectedSize = null;
+      if (product.sizes && product.sizes.length > 0) {
+        // Option 1: default to first available size
+        selectedSize = product.sizes[0];
+        if (it.quantity > selectedSize.stock) {
+          return res.status(400).json({
+            message: `Only ${selectedSize.stock} left for ${product.productName}`,
           });
+        }
+        // Deduct stock for this size
+        await Product.updateOne(
+          { _id: product._id, "sizes._id": selectedSize._id },
+          { $inc: { "sizes.$.stock": -it.quantity } }
+        );
+      } else {
+        if (it.quantity > product.stock) {
+          return res.status(400).json({
+            message: `Only ${product.stock} left for ${product.productName}`,
+          });
+        }
+        // Deduct stock for product
+        await Product.findByIdAndUpdate(product._id, {
+          $inc: { stock: -it.quantity },
+        });
+      }
+
+      items.push({
+        product: product._id,
+        size: selectedSize?._id || null,
+        quantity: it.quantity,
+        price: selectedSize?.price || product.price,
+        productName: product.productName,
+        sizeName: selectedSize?.size || null,
+      });
     }
 
-    const items = cart.items.map((i) => ({
-      product: i.product._id,
-      size: i.size._id,
-      quantity: i.quantity,
-      price: i.product.price,
-      productName: i.product.productName,
-      sizeName: i.size.size,
-    }));
-
     const subtotal = items.reduce((a, i) => a + i.price * i.quantity, 0);
+    const discount = req.body.discount || 0;
+    const tax = req.body.tax || 0;
+    const totalPrice = subtotal - discount + tax;
+
     const order = await Order.create({
       user: req.user.id,
       items,
       shippingAddress: req.body.shippingAddress,
-      paymentMethod: req.body.paymentMethod,
+      paymentMethod: req.body.paymentMethod || "COD",
       subtotal,
-      discount: 0,
-      tax: 0,
-      totalPrice: subtotal,
-      invoiceNumber: Math.floor(10000000 + Math.random() * 90000000),
+      discount,
+      tax,
+      totalPrice,
     });
 
-    for (const i of cart.items)
-      await Product.findByIdAndUpdate(i.product._id, {
-        $inc: { stock: -i.quantity },
-      });
+    // Clear cart
     cart.items = [];
     await cart.save();
 
     const { filePath, invoiceNumber } = await generateInvoice(order);
+
     res.json({
-      message: "Order placed",
+      message: "Order placed successfully",
       order,
       invoicePath: filePath,
       invoiceNumber,
     });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 };
 
+
+// Download Invoice
 const downloadInvoice = async (req, res) => {
-  const order = await Order.findById(req.params.id)
-    .populate("user", "username email")
-    .populate("items.product", "productName price")
-    .populate("items.size", "size");
-  if (!order) return res.status(404).json({ message: "Order not found" });
-  const { filePath } = await generateInvoice(order.toObject());
-  res.download(filePath);
+  try {
+    const order = await Order.findById(req.params.id)
+      .populate("user", "username email")
+      .populate("items.product", "productName price")
+      .populate({ path: "items.size", strictPopulate: false }); // fix strict populate
+
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    const { filePath } = await generateInvoice(order.toObject());
+    res.download(filePath);
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
 };
 
-const getUserOrders = async (req, res) =>
-  res.json(await Order.find({ user: req.user.id }).sort({ createdAt: -1 }));
-const getOrderById = async (req, res) =>
-  res.json(
-    await Order.findById(req.params.id).populate(
-      "items.product items.size user"
-    )
-  );
-const getAllOrders = async (req, res) =>
-  res.json(
-    await Order.find()
-      .populate("items.product items.size user")
-      .sort({ createdAt: -1 })
-  );
-const updateOrderStatus = async (req, res) =>
-  res.json(
-    await Order.findByIdAndUpdate(
+// Get orders for logged-in user
+const getUserOrders = async (req, res) => {
+  try {
+    const orders = await Order.find({ user: req.user.id }).sort({
+      createdAt: -1,
+    });
+    res.json({ count: orders.length, orders });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Get order by ID
+const getOrderById = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id)
+      .populate("items.product")
+      .populate({ path: "items.size", strictPopulate: false })
+      .populate("user");
+
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    res.json(order);
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Get all orders (Admin)
+const getAllOrders = async (req, res) => {
+  try {
+    const orders = await Order.find()
+      .populate("items.product")
+      .populate({ path: "items.size", strictPopulate: false })
+      .populate("user")
+      .sort({ createdAt: -1 });
+    res.json({ count: orders.length, orders });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Update order status (Admin)
+const updateOrderStatus = async (req, res) => {
+  try {
+    const order = await Order.findByIdAndUpdate(
       req.params.id,
       { status: req.body.status },
       { new: true }
-    )
-  );
+    );
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    res.json({ message: "Order status updated", order });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Cancel order (User)
 const cancelOrder = async (req, res) => {
-  const o = await Order.findById(req.params.id);
-  if (!o) return res.status(404).json({ message: "Order not found" });
-  if (o.user.toString() !== req.user.id)
-    return res.status(403).json({ message: "Not authorized" });
-  if (o.status === "Delivered")
-    return res
-      .status(400)
-      .json({ message: "Delivered order cannot be cancelled" });
-  o.status = "Cancelled";
-  await o.save();
-  res.json({ message: "Order cancelled", o });
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (order.user.toString() !== req.user.id)
+      return res.status(403).json({ message: "Not authorized" });
+    if (order.status === "Delivered")
+      return res
+        .status(400)
+        .json({ message: "Delivered order cannot be cancelled" });
+
+    order.status = "Cancelled";
+    await order.save();
+
+    // Restore stock
+    for (const i of order.items) {
+      if (i.size) {
+        await Product.updateOne(
+          { _id: i.product, "sizes._id": i.size },
+          { $inc: { "sizes.$.stock": i.quantity } }
+        );
+      } else {
+        await Product.findByIdAndUpdate(i.product, {
+          $inc: { stock: i.quantity },
+        });
+      }
+    }
+
+    res.json({ message: "Order cancelled", order });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
 };
 
 module.exports = {

@@ -13,9 +13,13 @@ const orderSchema = new mongoose.Schema(
           ref: "Product",
           required: true,
         },
-        size: { type: mongoose.Schema.Types.ObjectId, ref: "Size" }, // Optional size reference
+        size: { type: mongoose.Schema.Types.ObjectId, ref: "Size" }, // Reference for stock mgmt
         quantity: { type: Number, required: true, min: 1 },
         price: { type: Number, required: true },
+
+        // ✅ Store names directly for invoice/history
+        productName: { type: String, required: true },
+        sizeName: { type: String }, // human-readable size string
       },
     ],
 

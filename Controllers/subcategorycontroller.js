@@ -20,23 +20,25 @@ const formatSubcategory = (sub) => ({
   subcategory: sub.subcategory,
   categoryID: sub.category?._id || null,
   category: sub.category?.categoryname || "Unknown",
-  sizes: sub.sizes?.map((s) => ({
-    _id: s._id,
-    sizename: s.sizename,
-  })) || [],
+  sizes:
+    sub.sizes?.map((s) => ({
+      _id: s._id,
+      size: s.size,
+    })) || [],
 });
-
 
 // ✅ Create Subcategory
 const createsubcategory = async (req, res) => {
   try {
     const { error } = createsubcategorySchema.validate(req.body);
-    if (error) return res.status(400).json({ message: error.details[0].message });
+    if (error)
+      return res.status(400).json({ message: error.details[0].message });
 
     const { subcategory, category, sizes } = req.body;
 
     const existing = await Subcategory.findOne({ subcategory });
-    if (existing) return res.status(400).json({ message: "Subcategory already exists" });
+    if (existing)
+      return res.status(400).json({ message: "Subcategory already exists" });
 
     // Sizes are optional — only include if provided
     const newSubcategory = new Subcategory({
@@ -48,7 +50,7 @@ const createsubcategory = async (req, res) => {
 
     const populated = await newSubcategory.populate([
       { path: "category", select: "categoryname" },
-      { path: "sizes", select: "size"},
+      { path: "sizes", select: "size" },
     ]);
 
     res.status(201).json({
@@ -65,7 +67,8 @@ const createsubcategory = async (req, res) => {
 const updatesubcategory = async (req, res) => {
   try {
     const { error } = updatesubcategorySchema.validate(req.body);
-    if (error) return res.status(400).json({ message: error.details[0].message });
+    if (error)
+      return res.status(400).json({ message: error.details[0].message });
 
     const { id } = req.params;
 
@@ -73,14 +76,19 @@ const updatesubcategory = async (req, res) => {
     const updateData = { ...req.body };
     if (!updateData.sizes) delete updateData.sizes;
 
-    const updatedSubcategory = await Subcategory.findByIdAndUpdate(id, updateData, {
-      new: true,
-      runValidators: true,
-    })
+    const updatedSubcategory = await Subcategory.findByIdAndUpdate(
+      id,
+      updateData,
+      {
+        new: true,
+        runValidators: true,
+      }
+    )
       .populate("category", "categoryname")
-      .populate("sizes", "sizename");
+      .populate("sizes", "size");
 
-    if (!updatedSubcategory) return res.status(404).json({ message: "Subcategory not found" });
+    if (!updatedSubcategory)
+      return res.status(404).json({ message: "Subcategory not found" });
 
     res.status(200).json({
       message: "Subcategory updated successfully",
@@ -97,7 +105,7 @@ const getallsubCategories = async (req, res) => {
   try {
     const subcategories = await Subcategory.find()
       .populate("category", "categoryname")
-      .populate("sizes", "sizename")
+      .populate("sizes", "size")
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -116,9 +124,10 @@ const getsubcategoryById = async (req, res) => {
     const { id } = req.params;
     const subcategory = await Subcategory.findById(id)
       .populate("category", "categoryname")
-      .populate("sizes", "sizename");
+      .populate("sizes", "size");
 
-    if (!subcategory) return res.status(404).json({ message: "Subcategory not found" });
+    if (!subcategory)
+      return res.status(404).json({ message: "Subcategory not found" });
 
     res.status(200).json({
       message: "Subcategory fetched successfully",
@@ -136,9 +145,10 @@ const deleteSubcategory = async (req, res) => {
     const { id } = req.params;
     const deletedSubcategory = await Subcategory.findByIdAndDelete(id)
       .populate("category", "categoryname")
-      .populate("sizes", "sizename");
+      .populate("sizes", "size");
 
-    if (!deletedSubcategory) return res.status(404).json({ message: "Subcategory not found" });
+    if (!deletedSubcategory)
+      return res.status(404).json({ message: "Subcategory not found" });
 
     res.status(200).json({
       message: "Subcategory deleted successfully",

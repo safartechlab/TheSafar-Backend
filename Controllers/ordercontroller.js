@@ -1,6 +1,7 @@
 const Order = require("../Models/ordermodel");
 const Cart = require("../Models/cartmodel");
 const Product = require("../Models/productmodel");
+const Size = require("../Models/sizemodel");
 const puppeteer = require("puppeteer");
 const fs = require("fs");
 const path = require("path");
@@ -15,50 +16,190 @@ const generateInvoice = async (order) => {
     order.invoiceNumber || Math.floor(10000 + Math.random() * 90000);
   const filePath = path.join(dir, `IN-${invoiceNumber}.pdf`);
 
+  const logoPath = path.join(__dirname, "../assets/banner.png");
+  const logoUrl = `file://${logoPath}`;
+
   const html = `
-  <html><head><style>
-    body { font-family: Arial, sans-serif; padding: 20px; }
-    .header { background:#1E3A8A; color:#fff; padding:15px; text-align:center; border-radius:8px; }
-    .invoice { background:#fff; padding:20px; margin-top:15px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.1); }
-    table { width:100%; border-collapse:collapse; margin-top:10px; }
-    th,td { padding:8px; border-bottom:1px solid #ddd; text-align:left; }
-    th { background:#1E3A8A; color:#fff; font-size:13px; text-transform:uppercase; }
-    .totals { text-align:right; margin-top:10px; }
-  </style></head>
+  <html>
+  <head>
+    <style>
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        padding: 30px;
+        color: #333;
+      }
+      .header {
+        text-align: center;
+        background: linear-gradient(135deg, #4facfe, #033045);
+        color: #ffff;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+      }
+      .header h1 {
+        margin: 0;
+        font-size: 32px;
+        letter-spacing: 1px;
+      }
+      .info-section {
+        display: flex;
+        justify-content: space-between;
+        margin: 20px 0;
+        font-size: 14px;
+      }
+      .info-left p, .info-right p {
+        margin: 3px 0;
+      }
+      .info-left strong {
+        color: #0077b6;
+      }
+      .shipping {
+        margin: 20px 0;
+        font-size: 14px;
+      }
+      .shipping h4 {
+        margin-bottom: 5px;
+        color: #0077b6;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+        font-size: 14px;
+      }
+      th {
+        background: #0077b6;
+        color: #fff;
+        padding: 10px;
+        text-transform: uppercase;
+      }
+      td {
+        border: 1px solid #ddd;
+        padding: 10px;
+        text-align: center;
+      }
+      tr:nth-child(even) { background: #f9f9f9; }
+      .totals {
+        margin-top: 20px;
+        float: right;
+        width: 40%;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+      }
+      .totals table {
+        width: 100%;
+        border: none;
+      }
+      .totals td {
+        padding: 10px;
+        text-align: right;
+        border: none;
+      }
+      .totals tr:last-child td {
+        font-weight: bold;
+        font-size: 16px;
+        border-top: 2px solid #0077b6;
+      }
+      .footer {
+        margin-top: 50px;
+        text-align: center;
+        font-size: 12px;
+        color: #777;
+      }
+    </style>
+  </head>
   <body>
-    <div class="header"><h2>TheSafarStore</h2></div>
-    <div class="invoice">
-      <h3>Invoice No :   ${invoiceNumber}</h3>
-      <p>Date: ${moment(order.createdAt).format("DD/MM/YYYY")}</p>
-      <p>Payment: ${order.paymentMethod}</p>
-      <h4>Shipping Address</h4>
-      <p>${order.shippingAddress?.houseno || ""}, ${
-    order.shippingAddress?.street || ""
-  }, 
-      ${order.shippingAddress?.city}, ${order.shippingAddress?.state} - ${
-    order.shippingAddress?.pincode
-  }</p>
-      <table>
-        <tr><th>S.No</th><th>Product</th><th>Size</th><th>Qty</th><th>Price</th><th>Total</th></tr>
-        ${order.items
-          .map(
-            (it, i) =>
-              `<tr><td>${i + 1}</td><td>${it.productName}</td><td>${
-                it.sizeName || "N/A"
-              }</td>
-          <td>${it.quantity}</td><td>₹${it.price}</td><td>₹${
-                it.price * it.quantity
-              }</td></tr>`
-          )
-          .join("")}
-      </table>
-      <div class="totals">
-        <p>Discount: ₹${order.discount || 0}</p>
-        <p>Tax: ₹${order.tax || 0}</p>
-        <h3>Total: ₹${order.totalPrice}</h3>
-      </div>
+    <!-- Header -->
+    <div class="header">
+      <h1>TheSafarStore</h1>
     </div>
-  </body></html>`;
+
+  <!-- Invoice Info + Company Info -->
+  <div class="info-section">
+    <div class="info-left">
+      <p><strong>Invoice No:</strong> ${invoiceNumber}</p>
+      <p><strong>Date:</strong> ${moment(order.createdAt).format(
+        "DD/MM/YYYY"
+      )}</p>
+      <p><strong>Payment:</strong> ${order.paymentMethod}</p>
+    </div>
+    <div class="info-right">
+      <p><strong>Office Address:</strong></p>
+      <p>410, Adinath Arcade, HoneyPark Road, Adajan, Surat - 395009</p>
+      <p>📞 +91-9979781975</p>
+      <p>✉️ thesafaronlinestore@gmail.com</p>
+    </div>
+  </div>
+
+  <!-- Shipping -->
+  <div class="shipping">
+    <h4>Shipping Address</h4>
+    <p>
+      ${order.shippingAddress?.houseno || ""}, 
+      ${order.shippingAddress?.street || ""}, 
+      ${order.shippingAddress?.landmark || ""},<br>
+      ${order.shippingAddress?.city}, 
+      ${order.shippingAddress?.state} - ${order.shippingAddress?.pincode}
+    </p>
+  </div>
+
+  <!-- Items Table -->
+  <table>
+    <tr>
+      <th>S.No</th>
+      <th>Product</th>
+      <th>Size</th>
+      <th>Qty</th>
+      <th>Price</th>
+      <th>Total</th>
+    </tr>
+    ${order.items
+      .map(
+        (it, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${it.productName}</td>
+        <td>${it.sizeName || "N/A"}</td>
+        <td>${it.quantity}</td>
+        <td>₹${it.price}</td>
+        <td>₹${it.price * it.quantity}</td>
+      </tr>
+    `
+      )
+      .join("")}
+  </table>
+
+  <!-- Totals -->
+  <div class="totals">
+    <table>
+      <tr>
+        <td>Subtotal:</td>
+        <td>₹${order.subtotal}</td>
+      </tr>
+      <tr>
+        <td>Discount:</td>
+        <td>- ₹${order.discount}</td>
+      </tr>
+      <tr>
+        <td>Tax:</td>
+        <td>+ ₹${order.tax}</td>
+      </tr>
+      <tr>
+        <td>Total:</td>
+        <td>₹${order.totalPrice}</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <p>Thank you for shopping with <strong>TheSafarStore</strong>! 💙</p>
+    <p>For support, contact us at support@thesafarstore.com</p>
+  </div>
+
+</body>
+</html>
+`;
 
   const browser = await puppeteer.launch({ headless: "new" });
   const page = await browser.newPage();
@@ -69,58 +210,72 @@ const generateInvoice = async (order) => {
   return { filePath, invoiceNumber };
 };
 
-// ================== Controllers ==================
-
-// Place Order
+// ================== Place Order ==================
 const placeOrder = async (req, res) => {
   try {
-    const cart = await Cart.findOne({ user: req.user.id }).populate(
-      "items.product",
-      "productName price stock sizes"
-    );
+    let items = [];
 
-    if (!cart || !cart.items.length)
-      return res.status(400).json({ message: "Cart is empty" });
+    const orderItems =
+      req.body.items && req.body.items.length > 0
+        ? req.body.items
+        : (await Cart.findOne({ user: req.user.id }).populate("items.product"))
+            ?.items;
 
-    // Build order items
-    const items = [];
-    for (const it of cart.items) {
-      const product = it.product;
+    if (!orderItems || orderItems.length === 0) {
+      return res.status(400).json({ message: "No items to place order" });
+    }
+
+    for (const it of orderItems) {
+      const product = await Product.findById(it.product).lean();
+      if (!product) return res.status(400).json({ message: "Invalid product" });
 
       let selectedSize = null;
-      if (product.sizes && product.sizes.length > 0) {
-        // Option 1: default to first available size
-        selectedSize = product.sizes[0];
+      if (it.size && product.sizes && product.sizes.length > 0) {
+        selectedSize = product.sizes.find((s) => s.size.equals(it.size));
+        if (!selectedSize) {
+          return res.status(400).json({ message: "Invalid size" });
+        }
+
         if (it.quantity > selectedSize.stock) {
           return res.status(400).json({
             message: `Only ${selectedSize.stock} left for ${product.productName}`,
           });
         }
-        // Deduct stock for this size
+
         await Product.updateOne(
-          { _id: product._id, "sizes._id": selectedSize._id },
+          { _id: product._id, "sizes.size": it.size },
           { $inc: { "sizes.$.stock": -it.quantity } }
         );
+
+        // ✅ fetch sizeName from Size model
+        const sizeDoc = await Size.findById(selectedSize.size).lean();
+        items.push({
+          product: product._id,
+          size: selectedSize?.size || null,
+          quantity: it.quantity,
+          price: selectedSize.price,
+          productName: product.productName,
+          sizeName: sizeDoc?.size || null,
+        });
       } else {
         if (it.quantity > product.stock) {
           return res.status(400).json({
             message: `Only ${product.stock} left for ${product.productName}`,
           });
         }
-        // Deduct stock for product
         await Product.findByIdAndUpdate(product._id, {
           $inc: { stock: -it.quantity },
         });
-      }
 
-      items.push({
-        product: product._id,
-        size: selectedSize?._id || null,
-        quantity: it.quantity,
-        price: selectedSize?.price || product.price,
-        productName: product.productName,
-        sizeName: selectedSize?.size || null,
-      });
+        items.push({
+          product: product._id,
+          size: null,
+          quantity: it.quantity,
+          price: product.price,
+          productName: product.productName,
+          sizeName: null,
+        });
+      }
     }
 
     const subtotal = items.reduce((a, i) => a + i.price * i.quantity, 0);
@@ -139,9 +294,11 @@ const placeOrder = async (req, res) => {
       totalPrice,
     });
 
-    // Clear cart
-    cart.items = [];
-    await cart.save();
+    if (!req.body.items) {
+      const cart = await Cart.findOne({ user: req.user.id });
+      cart.items = [];
+      await cart.save();
+    }
 
     const { filePath, invoiceNumber } = await generateInvoice(order);
 
@@ -157,66 +314,68 @@ const placeOrder = async (req, res) => {
   }
 };
 
-
-// Download Invoice
+// ================== Download Invoice ==================
 const downloadInvoice = async (req, res) => {
   try {
     const order = await Order.findById(req.params.id)
-      .populate("user", "username email")
       .populate("items.product", "productName price")
-      .populate({ path: "items.size", strictPopulate: false }); // fix strict populate
+      .populate("items.size");
 
     if (!order) return res.status(404).json({ message: "Order not found" });
 
-    const { filePath } = await generateInvoice(order.toObject());
+    const { filePath } = await generateInvoice(order);
     res.download(filePath);
   } catch (err) {
     res.status(500).json({ message: "Server error" });
   }
 };
 
-// Get orders for logged-in user
+// ================== Get User Orders ==================
 const getUserOrders = async (req, res) => {
   try {
-    const orders = await Order.find({ user: req.user.id }).sort({
-      createdAt: -1,
-    });
+    let orders = await Order.find({ user: req.user.id })
+      .sort({ createdAt: -1 })
+      .populate("items.product", "productName")
+      .populate("items.size");
+
     res.json({ count: orders.length, orders });
   } catch (err) {
     res.status(500).json({ message: "Server error" });
   }
 };
 
-// Get order by ID
+// ================== Get Order By ID ==================
 const getOrderById = async (req, res) => {
   try {
-    const order = await Order.findById(req.params.id)
+    let order = await Order.findById(req.params.id)
       .populate("items.product")
-      .populate({ path: "items.size", strictPopulate: false })
+      .populate("items.size")
       .populate("user");
 
     if (!order) return res.status(404).json({ message: "Order not found" });
+
     res.json(order);
   } catch (err) {
     res.status(500).json({ message: "Server error" });
   }
 };
 
-// Get all orders (Admin)
+// ================== Get All Orders (Admin) ==================
 const getAllOrders = async (req, res) => {
   try {
-    const orders = await Order.find()
+    let orders = await Order.find()
       .populate("items.product")
-      .populate({ path: "items.size", strictPopulate: false })
+      .populate("items.size")
       .populate("user")
       .sort({ createdAt: -1 });
+
     res.json({ count: orders.length, orders });
   } catch (err) {
     res.status(500).json({ message: "Server error" });
   }
 };
 
-// Update order status (Admin)
+// ================== Update Order Status (Admin) ==================
 const updateOrderStatus = async (req, res) => {
   try {
     const order = await Order.findByIdAndUpdate(
@@ -224,6 +383,7 @@ const updateOrderStatus = async (req, res) => {
       { status: req.body.status },
       { new: true }
     );
+
     if (!order) return res.status(404).json({ message: "Order not found" });
     res.json({ message: "Order status updated", order });
   } catch (err) {
@@ -231,7 +391,7 @@ const updateOrderStatus = async (req, res) => {
   }
 };
 
-// Cancel order (User)
+// ================== Cancel Order (User) ==================
 const cancelOrder = async (req, res) => {
   try {
     const order = await Order.findById(req.params.id);
@@ -246,11 +406,10 @@ const cancelOrder = async (req, res) => {
     order.status = "Cancelled";
     await order.save();
 
-    // Restore stock
     for (const i of order.items) {
       if (i.size) {
         await Product.updateOne(
-          { _id: i.product, "sizes._id": i.size },
+          { _id: i.product, "sizes.size": i.size }, // match by size reference
           { $inc: { "sizes.$.stock": i.quantity } }
         );
       } else {

@@ -177,9 +177,20 @@ const login = async (req, res) => {
       { expiresIn: "1d" }
     );
 
-    res
-      .status(200)
-      .json({ message: "Login successful", data: user, token: token });
+    // Remove sensitive fields before sending response
+    const {
+      password: _,
+      resetPasswordOTP,
+      resetPasswordExpires,
+      ...safeUser
+    } = user._doc;
+
+    res.status(200).json({
+      message: "Login successful",
+      token,
+      usertype: user.usertype,
+      data: safeUser,
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Server error" });
@@ -337,6 +348,36 @@ const resetPassword = async (req, res) => {
   }
 };
 
+
+  const verifyOtp = async (req, res) => {
+    try {
+      const { email, otp } = req.body;
+
+      // ✅ Check required fields
+      if (!email || !otp) {
+        return res.status(400).json({ message: "Email and OTP are required" });
+      }
+
+      // ✅ Find user with matching email + OTP + not expired
+      const user = await User.findOne({
+        email,
+        resetPasswordOTP: otp,
+        resetPasswordExpires: { $gt: Date.now() },
+      });
+
+      if (!user) {
+        return res.status(400).json({ message: "Invalid or expired OTP" });
+      }
+
+      // ✅ OTP is valid
+      return res.status(200).json({ message: "OTP verified successfully" });
+    } catch (err) {
+      console.error("Verify OTP Error:", err);
+      return res.status(500).json({ message: "Server error" });
+    }
+  };
+
+
 module.exports = {
   signup,
   login,
@@ -346,4 +387,5 @@ module.exports = {
   authverify,
   forgotPassword,
   resetPassword,
+  verifyOtp
 };

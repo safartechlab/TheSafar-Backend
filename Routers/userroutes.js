@@ -10,6 +10,7 @@ const {
   authverify,
   forgotPassword,
   resetPassword,
+  verifyOtp
 } = require("../Controllers/usercontroller");
 const { Auth } = require("../middleware/requireauth");
 
@@ -22,5 +23,6 @@ router.post("/authverify", Auth, authverify);
 router.post("/sendmail", mailsend);
 router.post("/forgotpassword", forgotPassword);
 router.post("/resetpassword", resetPassword);
+router.post("/verifyotp", verifyOtp)
 
 module.exports = router;

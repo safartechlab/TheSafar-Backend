@@ -3,6 +3,7 @@ const Category = require("../Models/categorymodel");
 const Subcategory = require("../Models/subcategory");
 const Size = require("../Models/sizemodel");
 const Joi = require("joi");
+const fs = require("fs");
 
 // ✅ Joi Schemas
 const productSchema = {
@@ -47,6 +48,11 @@ const productSchema = {
         })
       )
       .optional(),
+    removedImages: Joi.alternatives().try(
+      Joi.array().items(Joi.string()), // already array
+      Joi.string() // or JSON string from frontend
+    ).optional(),
+
   }),
 };
 
@@ -138,32 +144,54 @@ const addProduct = async (req, res) => {
   }
 };
 
-// Update Product
+
 const updateProduct = async (req, res) => {
   try {
     const sizes = parseJSON(req.body.sizes || "[]");
+    let removedImages = parseJSON(req.body.removedImages || "[]");
 
-    const { error } = productSchema.update.validate({ ...req.body, sizes });
-    if (error)
+    // validate
+    const { error } = productSchema.update.validate({
+      ...req.body,
+      sizes,
+      removedImages,
+    });
+    if (error) {
       return res.status(400).json({ message: error.details[0].message });
+    }
 
     await validateRefs(req.body.category, req.body.subcategory, sizes);
 
     const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ message: "Product not found" });
 
+    // remove old images if requested
+    if (removedImages.length > 0) {
+      product.images = product.images.filter((img) => {
+        if (removedImages.includes(img.filepath)) {
+          if (fs.existsSync(img.filepath)) {
+            fs.unlinkSync(img.filepath); // delete file
+          }
+          return false;
+        }
+        return true;
+      });
+    }
+
+    // new uploaded images
     const newImages = (req.files || []).map((file) => ({
       filename: file.filename,
       filepath: file.path,
     }));
 
-    // Merge existing sizes with updated sizes if provided
-    let updatedSizes = sizes.length > 0 ? sizes : product.sizes;
+    const allImages = [...product.images, ...newImages];
+
+    const updatedSizes = sizes.length > 0 ? sizes : product.sizes;
 
     const updatedData = {
       ...req.body,
       sizes: updatedSizes,
-      images: [...product.images, ...newImages],
+      images: allImages,
       stock: calculateStock(updatedSizes, req.body.stock),
       price: calculatePrice(updatedSizes, req.body.price),
     };
@@ -171,10 +199,7 @@ const updateProduct = async (req, res) => {
     const updated = await Product.findByIdAndUpdate(
       req.params.id,
       updatedData,
-      {
-        new: true,
-        runValidators: true,
-      }
+      { new: true, runValidators: true }
     )
       .populate("category", "categoryname")
       .populate("subcategory", "subcategory")
@@ -185,6 +210,7 @@ const updateProduct = async (req, res) => {
     res.status(500).json({ message: err.message || "Server error" });
   }
 };
+
 
 // Get All Products
 const getAllProducts = async (req, res) => {

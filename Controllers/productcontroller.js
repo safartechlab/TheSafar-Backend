@@ -9,7 +9,7 @@ const fs = require("fs");
 const productSchema = {
   create: Joi.object({
     productName: Joi.string().min(2).required(),
-    gender: Joi.string().valid("Male", "Female", "Unisex").required(),
+    gender: Joi.string().valid("Male","Female","Unisex").required(),
     stock: Joi.number().min(0).optional(),
     price: Joi.number().min(0).optional(),
     discount: Joi.number().min(0).optional(),
@@ -125,8 +125,8 @@ const addProduct = async (req, res) => {
 
     if (sizes.length > 0) {
       newProductData.sizes = sizes;
-      newProductData.stock = calculateStock(sizes); // calculate total stock from sizes
-      newProductData.price = calculatePrice(sizes); // optional: top-level price = min size price
+      newProductData.price = null; 
+      newProductData.stock = null; 
     } else {
       newProductData.sizes = [];
     }

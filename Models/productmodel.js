@@ -17,7 +17,7 @@ const productSchema = new mongoose.Schema(
     gender: {
       type: String,
       required: [true, "Gender is required"],
-      enum: ["Male", "Female", "Unisex"], 
+      enum: ["Male", "Female", "Unisex"],
     },
     sizes: [
       {
@@ -28,11 +28,11 @@ const productSchema = new mongoose.Schema(
     ],
     stock: {
       type: Number,
-      default: 0,
+      default: null,
     },
     price: {
       type: Number,
-      min: 0,
+      min: null,
     },
     discount: {
       type: Number,
@@ -41,7 +41,7 @@ const productSchema = new mongoose.Schema(
     },
     discountType: {
       type: String,
-      enum: ["Percentage", "Flat"], // optional: restrict values
+      enum: ["Percentage", "Flat"],
     },
     description: {
       type: String,

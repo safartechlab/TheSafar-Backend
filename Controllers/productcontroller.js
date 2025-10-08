@@ -4,11 +4,8 @@ const Subcategory = require("../Models/subcategory");
 const Size = require("../Models/sizemodel");
 const Joi = require("joi");
 const fs = require("fs");
-<<<<<<< HEAD
-=======
 
 
->>>>>>> d19b6ad42c61ae35b61137f3919dad9904b681ae
 
 // ✅ Joi Schemas
 const productSchema = {
@@ -53,17 +50,9 @@ const productSchema = {
         })
       )
       .optional(),
-<<<<<<< HEAD
-    removedImages: Joi.alternatives().try(
-      Joi.array().items(Joi.string()), // already array
-      Joi.string() // or JSON string from frontend
-    ).optional(),
-
-=======
     removedImages: Joi.alternatives()
       .try(Joi.array().items(Joi.string()), Joi.string())
       .optional(),
->>>>>>> d19b6ad42c61ae35b61137f3919dad9904b681ae
   }),
 };
 
@@ -155,11 +144,7 @@ const addProduct = async (req, res) => {
   }
 };
 
-<<<<<<< HEAD
-
-=======
 // ➤ Update Product
->>>>>>> d19b6ad42c61ae35b61137f3919dad9904b681ae
 const updateProduct = async (req, res) => {
   try {
     const sizes = parseJSON(req.body.sizes || "[]");
@@ -171,33 +156,21 @@ const updateProduct = async (req, res) => {
       sizes,
       removedImages,
     });
-<<<<<<< HEAD
-    if (error) {
-=======
     if (error)
->>>>>>> d19b6ad42c61ae35b61137f3919dad9904b681ae
       return res.status(400).json({ message: error.details[0].message });
-    }
+    
 
     await validateRefs(req.body.category, req.body.subcategory, sizes);
 
     const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ message: "Product not found" });
 
-<<<<<<< HEAD
-    // remove old images if requested
-=======
     // remove old images
->>>>>>> d19b6ad42c61ae35b61137f3919dad9904b681ae
     if (removedImages.length > 0) {
       product.images = product.images.filter((img) => {
         if (removedImages.includes(img.filepath)) {
           if (fs.existsSync(img.filepath)) {
-<<<<<<< HEAD
-            fs.unlinkSync(img.filepath); // delete file
-=======
             fs.unlinkSync(img.filepath);
->>>>>>> d19b6ad42c61ae35b61137f3919dad9904b681ae
           }
           return false;
         }
@@ -212,10 +185,6 @@ const updateProduct = async (req, res) => {
     }));
 
     const allImages = [...product.images, ...newImages];
-<<<<<<< HEAD
-
-=======
->>>>>>> d19b6ad42c61ae35b61137f3919dad9904b681ae
     const updatedSizes = sizes.length > 0 ? sizes : product.sizes;
 
     product.set({
@@ -226,17 +195,9 @@ const updateProduct = async (req, res) => {
       price: calculatePrice(updatedSizes, req.body.price),
     });
 
-<<<<<<< HEAD
-    const updated = await Product.findByIdAndUpdate(
-      req.params.id,
-      updatedData,
-      { new: true, runValidators: true }
-    )
-=======
     await product.save();
 
     const updated = await Product.findById(product._id)
->>>>>>> d19b6ad42c61ae35b61137f3919dad9904b681ae
       .populate("category", "categoryname")
       .populate("subcategory", "subcategory")
       .populate("sizes.size", "size");
@@ -247,12 +208,7 @@ const updateProduct = async (req, res) => {
   }
 };
 
-<<<<<<< HEAD
-
-// Get All Products
-=======
 // ➤ Get All Products
->>>>>>> d19b6ad42c61ae35b61137f3919dad9904b681ae
 const getAllProducts = async (req, res) => {
   try {
     const { category } = req.query;

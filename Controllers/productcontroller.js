@@ -4,12 +4,17 @@ const Subcategory = require("../Models/subcategory");
 const Size = require("../Models/sizemodel");
 const Joi = require("joi");
 const fs = require("fs");
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> d19b6ad42c61ae35b61137f3919dad9904b681ae
 
 // ✅ Joi Schemas
 const productSchema = {
   create: Joi.object({
     productName: Joi.string().min(2).required(),
-    gender: Joi.string().valid("Male","Female","Unisex").required(),
+    gender: Joi.string().valid("Male", "Female", "Unisex").required(),
     stock: Joi.number().min(0).optional(),
     price: Joi.number().min(0).optional(),
     discount: Joi.number().min(0).optional(),
@@ -48,11 +53,17 @@ const productSchema = {
         })
       )
       .optional(),
+<<<<<<< HEAD
     removedImages: Joi.alternatives().try(
       Joi.array().items(Joi.string()), // already array
       Joi.string() // or JSON string from frontend
     ).optional(),
 
+=======
+    removedImages: Joi.alternatives()
+      .try(Joi.array().items(Joi.string()), Joi.string())
+      .optional(),
+>>>>>>> d19b6ad42c61ae35b61137f3919dad9904b681ae
   }),
 };
 
@@ -83,7 +94,7 @@ const validateRefs = async (category, subcategory, sizes = []) => {
   }
 };
 
-// Helper to calculate total stock
+// calculate stock
 const calculateStock = (sizes, topStock) => {
   if (sizes && sizes.length > 0) {
     return sizes.reduce((total, s) => total + (s.stock || 0), 0);
@@ -91,7 +102,7 @@ const calculateStock = (sizes, topStock) => {
   return topStock || 0;
 };
 
-// Helper to calculate min price (optional)
+// calculate min price
 const calculatePrice = (sizes, topPrice) => {
   if (sizes && sizes.length > 0) {
     return Math.min(...sizes.map((s) => s.price));
@@ -99,14 +110,12 @@ const calculatePrice = (sizes, topPrice) => {
   return topPrice || 0;
 };
 
-// ✅ Controller
-
-// Create Product
+// ➤ Add Product
 const addProduct = async (req, res) => {
   try {
     const sizes = parseJSON(req.body.sizes || "[]");
 
-    // Validate input
+    // validate
     const { error } = productSchema.create.validate({ ...req.body, sizes });
     if (error)
       return res.status(400).json({ message: error.details[0].message });
@@ -125,13 +134,15 @@ const addProduct = async (req, res) => {
 
     if (sizes.length > 0) {
       newProductData.sizes = sizes;
-      newProductData.price = null; 
-      newProductData.stock = null; 
+      newProductData.price = null;
+      newProductData.stock = calculateStock(sizes, null);
     } else {
       newProductData.sizes = [];
+      newProductData.stock = req.body.stock || 0;
     }
 
-    const newProduct = await Product.create(newProductData);
+    const newProduct = new Product(newProductData);
+    await newProduct.save(); // trigger pre-save hook for discounts
 
     const populated = await Product.findById(newProduct._id)
       .populate("category", "categoryname")
@@ -144,7 +155,11 @@ const addProduct = async (req, res) => {
   }
 };
 
+<<<<<<< HEAD
 
+=======
+// ➤ Update Product
+>>>>>>> d19b6ad42c61ae35b61137f3919dad9904b681ae
 const updateProduct = async (req, res) => {
   try {
     const sizes = parseJSON(req.body.sizes || "[]");
@@ -156,7 +171,11 @@ const updateProduct = async (req, res) => {
       sizes,
       removedImages,
     });
+<<<<<<< HEAD
     if (error) {
+=======
+    if (error)
+>>>>>>> d19b6ad42c61ae35b61137f3919dad9904b681ae
       return res.status(400).json({ message: error.details[0].message });
     }
 
@@ -165,12 +184,20 @@ const updateProduct = async (req, res) => {
     const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ message: "Product not found" });
 
+<<<<<<< HEAD
     // remove old images if requested
+=======
+    // remove old images
+>>>>>>> d19b6ad42c61ae35b61137f3919dad9904b681ae
     if (removedImages.length > 0) {
       product.images = product.images.filter((img) => {
         if (removedImages.includes(img.filepath)) {
           if (fs.existsSync(img.filepath)) {
+<<<<<<< HEAD
             fs.unlinkSync(img.filepath); // delete file
+=======
+            fs.unlinkSync(img.filepath);
+>>>>>>> d19b6ad42c61ae35b61137f3919dad9904b681ae
           }
           return false;
         }
@@ -185,22 +212,31 @@ const updateProduct = async (req, res) => {
     }));
 
     const allImages = [...product.images, ...newImages];
+<<<<<<< HEAD
 
+=======
+>>>>>>> d19b6ad42c61ae35b61137f3919dad9904b681ae
     const updatedSizes = sizes.length > 0 ? sizes : product.sizes;
 
-    const updatedData = {
+    product.set({
       ...req.body,
       sizes: updatedSizes,
       images: allImages,
       stock: calculateStock(updatedSizes, req.body.stock),
       price: calculatePrice(updatedSizes, req.body.price),
-    };
+    });
 
+<<<<<<< HEAD
     const updated = await Product.findByIdAndUpdate(
       req.params.id,
       updatedData,
       { new: true, runValidators: true }
     )
+=======
+    await product.save();
+
+    const updated = await Product.findById(product._id)
+>>>>>>> d19b6ad42c61ae35b61137f3919dad9904b681ae
       .populate("category", "categoryname")
       .populate("subcategory", "subcategory")
       .populate("sizes.size", "size");
@@ -211,11 +247,21 @@ const updateProduct = async (req, res) => {
   }
 };
 
+<<<<<<< HEAD
 
 // Get All Products
+=======
+// ➤ Get All Products
+>>>>>>> d19b6ad42c61ae35b61137f3919dad9904b681ae
 const getAllProducts = async (req, res) => {
   try {
-    const products = await Product.find()
+    const { category } = req.query;
+    const filter = {};
+
+    if (category) {
+      filter.category = category;
+    }
+    const products = await Product.find(filter)
       .populate("category", "categoryname")
       .populate("subcategory", "subcategory")
       .populate("sizes.size", "size")
@@ -231,7 +277,7 @@ const getAllProducts = async (req, res) => {
   }
 };
 
-// Get Product by ID
+// ➤ Get Product by ID
 const getProductById = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id)
@@ -246,7 +292,7 @@ const getProductById = async (req, res) => {
   }
 };
 
-// Delete Product
+// ➤ Delete Product
 const deleteProduct = async (req, res) => {
   try {
     const deleted = await Product.findByIdAndDelete(req.params.id);

@@ -4,8 +4,7 @@ const Subcategory = require("../Models/subcategory");
 const Size = require("../Models/sizemodel");
 const Joi = require("joi");
 const fs = require("fs");
-
-
+const mongoose = require("mongoose")
 
 // ✅ Joi Schemas
 const productSchema = {
@@ -214,21 +213,24 @@ const getAllProducts = async (req, res) => {
     const filter = {};
 
     if (category) {
-      filter.category = category;
+      // Validate ObjectId before using it
+      if (mongoose.Types.ObjectId.isValid(category)) {
+        filter.category = new mongoose.Types.ObjectId(category);
+      } else {
+        return res.status(400).json({ message: "Invalid category ID format" });
+      }
     }
-    const products = await Product.find(filter)
-      .populate("category", "categoryname")
-      .populate("subcategory", "subcategory")
-      .populate("sizes.size", "size")
-      .sort({ createdAt: -1 });
 
-    res.json({
-      message: "Products fetched",
-      count: products.length,
-      data: products,
+    // Use correct reference field name
+    const products = await Product.find(filter).populate("category");
+
+    res.status(200).json({ data: products });
+  } catch (error) {
+    console.error("Error in getAllProduct:", error);
+    res.status(500).json({
+      message: "Internal Server Error",
+      error: error.message,
     });
-  } catch (err) {
-    res.status(500).json({ message: err.message || "Server error" });
   }
 };
 

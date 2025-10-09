@@ -223,7 +223,7 @@ const getAllProducts = async (req, res) => {
     }
 
     // Use correct reference field name
-    const products = await Product.find(filter).populate("category");
+    const products = await Product.find(filter).populate("category").populate("sizes.size");
 
     res.status(200).json({ data: products });
   } catch (error) {

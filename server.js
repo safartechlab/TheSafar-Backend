@@ -12,6 +12,7 @@ const productrouter = require("./Routers/productroutes");
 const cartrouter = require("./Routers/cartrouter");
 const orderrouter = require("./Routers/orderroutes");
 const bannerrouter = require("./Routers/bannerrouter");
+const wishlistrouter = require("./Routers/wishlistrouter");
 app.use(cors());
 app.use(express.json());
 
@@ -23,7 +24,8 @@ app.use("/size", sizerouter);
 app.use("/product",productrouter);
 app.use("/cart",cartrouter);
 app.use("/order",orderrouter);
-app.use("/banner",bannerrouter)
+app.use("/banner",bannerrouter);
+app.use("/wishlist", wishlistrouter);
 
 
 const startServer = async () => {

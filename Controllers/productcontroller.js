@@ -10,7 +10,7 @@ const mongoose = require("mongoose")
 const productSchema = {
   create: Joi.object({
     productName: Joi.string().min(2).required(),
-    gender: Joi.string().valid("Male", "Female", "Unisex").required(),
+    gender: Joi.string().valid("Male", "Female", "Unisex").optional(),
     stock: Joi.number().min(0).optional(),
     price: Joi.number().min(0).optional(),
     discount: Joi.number().min(0).optional(),

@@ -4,7 +4,7 @@ const Subcategory = require("../Models/subcategory");
 const Size = require("../Models/sizemodel");
 const Joi = require("joi");
 const fs = require("fs");
-const mongoose = require("mongoose")
+const mongoose = require("mongoose");
 
 // ✅ Joi Schemas
 const productSchema = {
@@ -209,28 +209,30 @@ const updateProduct = async (req, res) => {
 // ➤ Get All Products
 const getAllProducts = async (req, res) => {
   try {
-    const { category } = req.query;
-    const filter = {};
+    const { category, subcategory, query } = req.query;
+    let filter = {};
 
-    if (category) {
-      // Validate ObjectId before using it
-      if (mongoose.Types.ObjectId.isValid(category)) {
-        filter.category = new mongoose.Types.ObjectId(category);
-      } else {
-        return res.status(400).json({ message: "Invalid category ID format" });
-      }
+    // Category filter
+    if (category && category !== "All") filter.category = category;
+
+    // Subcategory filter
+    if (subcategory && subcategory !== "All") filter.subcategory = subcategory;
+
+    // Query search: productName OR categoryname OR subcategoryname
+    if (query) {
+      const q = query.toLowerCase();
+      filter.$or = [
+        { productName: { $regex: q, $options: "i" } },
+        { subcategoryname: { $regex: q, $options: "i" } },
+        { "category.categoryname": { $regex: q, $options: "i" } }, // adjust if category is populated
+      ];
     }
 
-    // Use correct reference field name
     const products = await Product.find(filter).populate("category");
-
-    res.status(200).json({ data: products });
+    res.json({ success: true, data: products });
   } catch (error) {
-    console.error("Error in getAllProduct:", error);
-    res.status(500).json({
-      message: "Internal Server Error",
-      error: error.message,
-    });
+    console.error(error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 

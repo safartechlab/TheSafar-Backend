@@ -15,7 +15,7 @@ const {
 // ================= USER ROUTES =================
 router.post("/placeorder", Auth, placeOrder);         // Place new order
 router.get("/myorders", Auth, getUserOrders);         // Get logged-in user's orders
-router.get("/getorder/:id", Auth, getOrderById);      // Get single order by ID
+router.get("/userorders/:userID", Auth, getOrderById);      // Get single order by ID
 router.put("/cancelorder/:id", Auth, cancelOrder);    // Cancel order
 router.get("/invoice/:id", Auth, downloadInvoice);    // Download invoice (secured)
 

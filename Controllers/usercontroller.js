@@ -188,6 +188,7 @@ const login = async (req, res) => {
     res.status(200).json({
       message: "Login successful",
       token,
+      userID:user._id,
       usertype: user.usertype,
       data: safeUser,
     });
@@ -377,6 +378,32 @@ const resetPassword = async (req, res) => {
     }
   };
 
+  const deleteUser = async (req, res) => {
+  try {
+    const userId = req.params.id;
+
+    // Optional: verify token and user
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ message: "Unauthorized" });
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (decoded.id !== userId && decoded.usertype !== "admin") {
+      return res.status(403).json({ message: "Forbidden: Not allowed to delete this user" });
+    }
+
+    // Delete user
+    const deletedUser = await User.findByIdAndDelete(userId);
+
+    if (!deletedUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json({ message: "User deleted successfully" });
+  } catch (error) {
+    console.error("Delete user error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
 
 module.exports = {
   signup,
@@ -387,5 +414,6 @@ module.exports = {
   authverify,
   forgotPassword,
   resetPassword,
-  verifyOtp
+  verifyOtp,
+  deleteUser
 };

@@ -345,17 +345,19 @@ const getUserOrders = async (req, res) => {
 };
 
 // ================== Get Order By ID ==================
-const getOrderById = async (req, res) => {
+const getOrderById   = async (req, res) => {
   try {
-    let order = await Order.findById(req.params.id)
+    const orders = await Order.find({ "user._id": req.params.userId })
       .populate("items.product")
       .populate("items.size")
       .populate("user");
 
-    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (!orders.length)
+      return res.status(404).json({ message: "No orders found" });
 
-    res.json(order);
+    res.status(200).json({ message: "Orders fetched successfully", orders });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 };

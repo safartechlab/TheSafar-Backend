@@ -13,6 +13,7 @@ const cartrouter = require("./Routers/cartrouter");
 const orderrouter = require("./Routers/orderroutes");
 const bannerrouter = require("./Routers/bannerrouter");
 const wishlistrouter = require("./Routers/wishlistrouter");
+const messagerouter = require("./Routers/messagerouter");
 app.use(cors());
 app.use(express.json());
 
@@ -26,6 +27,7 @@ app.use("/cart",cartrouter);
 app.use("/order",orderrouter);
 app.use("/banner",bannerrouter);
 app.use("/wishlist", wishlistrouter);
+app.use("/message",messagerouter);
 
 
 const startServer = async () => {

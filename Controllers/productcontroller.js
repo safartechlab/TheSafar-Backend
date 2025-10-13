@@ -157,6 +157,7 @@ const updateProduct = async (req, res) => {
     });
     if (error)
       return res.status(400).json({ message: error.details[0].message });
+    
 
     await validateRefs(req.body.category, req.body.subcategory, sizes);
 
@@ -228,8 +229,10 @@ const getAllProducts = async (req, res) => {
       ];
     }
 
-    const products = await Product.find(filter).populate("category");
-    res.json({ success: true, data: products });
+    // Use correct reference field name
+    const products = await Product.find(filter).populate("category").populate("sizes.size");
+
+    res.status(200).json({ data: products });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: error.message });

@@ -3,13 +3,15 @@ const Banner = require("../Models/bannermodel");
 // Upload Banner
 const bannerupload = async (req, res) => {
   try {
+    console.log("📸 Received files:", req.files);
+
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ message: "Banner image is required" });
     }
 
     const banners = req.files.map((file) => ({
-      filename: file.filename,
-      filepath: file.path,
+      filename: file.originalname,
+      filepath: file.path || file.secure_url || file.url, // Cloudinary returns 'path' = secure_url
     }));
 
     const newbanner = new Banner({
@@ -17,14 +19,24 @@ const bannerupload = async (req, res) => {
     });
 
     await newbanner.save();
+    console.log("✅ Saved Banner:", JSON.stringify(newbanner, null, 2));
+
 
     res.status(201).json({
       message: "Banner uploaded successfully",
       data: newbanner,
     });
   } catch (error) {
-    console.error("Upload Banner Error", error);
-    res.status(500).json({ message: "Internal Server Error" });
+    console.error(
+      "❌ Upload Banner Error Details:",
+      JSON.stringify(error, null, 2)
+    );
+    console.error("Message:", error.message);
+    console.error(error.stack);
+    res.status(500).json({
+      message: "Upload failed",
+      error: error.message || "Unknown error",
+    });
   }
 };
 
@@ -74,8 +86,8 @@ const getallbanners = async (req, res) => {
   }
 };
 
-const deletebanner = async(req,res)=>{
-     try {
+const deletebanner = async (req, res) => {
+  try {
     const { id } = req.params;
 
     const deletedBanner = await Banner.findByIdAndDelete(id);
@@ -90,6 +102,6 @@ const deletebanner = async(req,res)=>{
     console.error("Delete Banner Error:", err);
     res.status(500).json({ message: "Internal Server Error" });
   }
-}
+};
 
-module.exports = { bannerupload, updatebanner, getallbanners,deletebanner };
+module.exports = { bannerupload, updatebanner, getallbanners, deletebanner };

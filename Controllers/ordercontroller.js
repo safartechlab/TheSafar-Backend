@@ -345,7 +345,7 @@ const getUserOrders = async (req, res) => {
 };
 
 // ================== Get Order By ID ==================
-const getOrderById   = async (req, res) => {
+const getOrderById = async (req, res) => {
   try {
     const orders = await Order.find({ "user._id": req.params.userId })
       .populate("items.product")
@@ -380,16 +380,38 @@ const getAllOrders = async (req, res) => {
 // ================== Update Order Status (Admin) ==================
 const updateOrderStatus = async (req, res) => {
   try {
-    const order = await Order.findByIdAndUpdate(
-      req.params.id,
-      { status: req.body.status },
+    const { id } = req.params; // order ID
+    const { status } = req.body; // new status (e.g. 'Shipped')
+
+    const validStatuses = [
+      "Received",
+      "Confirmed",
+      "Rejected",
+      "Shipped",
+      "Delivered",
+      "Cancelled",
+    ];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ message: "Invalid status" });
+    }
+
+    const updatedOrder = await Order.findByIdAndUpdate(
+      id,
+      { status },
       { new: true }
     );
 
-    if (!order) return res.status(404).json({ message: "Order not found" });
-    res.json({ message: "Order status updated", order });
-  } catch (err) {
-    res.status(500).json({ message: "Server error" });
+    if (!updatedOrder) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    res.status(200).json({
+      message: "Order status updated successfully",
+      updatedOrder,
+    });
+  } catch (error) {
+    console.error("Error updating order status:", error);
+    res.status(500).json({ message: "Internal Server Error" });
   }
 };
 

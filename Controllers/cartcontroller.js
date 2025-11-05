@@ -10,30 +10,28 @@ const addToCart = async (req, res) => {
     const product = await Product.findById(productId);
     if (!product) return res.status(404).json({ message: "Product not found" });
 
-    // 🔹 Determine the correct size and pricing
+    // 🔹 Determine the correct price
     let selectedSize = null;
-    let price = product.price || 0;
-    let discountedPrice = product.discountedPrice || price;
+    let price = product.price || 0; // 🔹 FIX: fallback to 0
+    let discountedPrice = product.discountedPrice || 0; // 🔹 FIX: fallback to 0
     let discountPercentage = product.discountPercentage || 0;
 
     if (sizeId) {
-      // ✅ FIX: Compare with s._id, not s.size
       selectedSize = product.sizes.find(
-        (s) => s._id.toString() === sizeId.toString()
+        (s) => s.size.toString() === sizeId.toString()
       );
-
       if (selectedSize) {
-        price = selectedSize.price || price;
-        discountedPrice = selectedSize.discountedPrice || discountedPrice;
+        price = selectedSize.price || price; // 🔹 FIX: ensure price exists
+        discountedPrice = selectedSize.discountedPrice || discountedPrice; // 🔹 FIX
         discountPercentage = selectedSize.discountPercentage || discountPercentage;
       }
     }
 
-    // 🔹 Find or create user cart
+    // 🔹 Find or create cart
     let cart = await Cart.findOne({ user: userId });
     if (!cart) cart = new Cart({ user: userId, items: [] });
 
-    // 🔹 Find existing item (match by product + size)
+    // 🔹 Check if item exists (with size handling)
     const existingItem = cart.items.find(
       (item) =>
         item.product.toString() === productId &&
@@ -41,16 +39,18 @@ const addToCart = async (req, res) => {
     );
 
     if (existingItem) {
-      existingItem.quantity = Math.max(1, existingItem.quantity + quantity);
-      existingItem.price = price;
+      // 🔹 Update quantity safely
+      existingItem.quantity = Math.max(1, existingItem.quantity + quantity); // 🔹 FIX
+      existingItem.price = price; // 🔹 FIX: always update price
       existingItem.discountedPrice = discountedPrice;
       existingItem.discountPercentage = discountPercentage;
     } else {
+      // 🔹 Add new item
       cart.items.push({
         product: productId,
-        size: sizeId || null,
+        size: sizeId,
         quantity,
-        price,
+        price,             // 🔹 FIX: required by Mongoose
         discountedPrice,
         discountPercentage,
         productName: product.productName,
@@ -60,30 +60,20 @@ const addToCart = async (req, res) => {
 
     await cart.save();
 
-    // 🔹 Populate product & size for frontend clarity
-    const populatedCart = await cart.populate([
-      { path: "items.product", select: "productName images" },
-      { path: "items.size", select: "size" },
-    ]);
-
-    // 🔹 Simplify response
-    const items = populatedCart.items.map((item) => ({
+    // 🔹 Simplified cart response for frontend
+    const items = cart.items.map((item) => ({
       _id: item._id,
-      productId: item.product._id,
-      productName: item.productName || item.product.productName,
-      image: item.image || item.product.images?.[0]?.filepath,
-      size: item.size ? item.size.size : null,
-      sizeId: item.size ? item.size._id : null,
+      productId: item.product,
+      size: item.size,
       quantity: item.quantity,
       price: item.price,
       discountedPrice: item.discountedPrice,
       discountPercentage: item.discountPercentage,
+      productName: item.productName,
+      image: item.image,
     }));
 
-    res.status(200).json({
-      message: "Item added to cart successfully",
-      items,
-    });
+    res.status(200).json({ message: "Item added to cart", items });
   } catch (error) {
     console.error("Add to cart error:", error);
     res.status(500).json({ message: "Internal server error" });

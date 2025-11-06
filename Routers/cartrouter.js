@@ -7,11 +7,11 @@ const {
   removeCartItem,
   clearCart,
 } = require("../Controllers/cartcontroller");
-const {Auth} = require("../middleware/requireauth");
+const { Auth } = require("../middleware/requireauth");
 
 router.post("/addtocart", Auth, addToCart);
 router.get("/getcart", Auth, getCart);
-router.put("/updatecart", Auth, updateCartItem);
+router.put("/updatecart/:cartItemId", Auth, updateCartItem);
 router.delete("/removecart/:id", Auth, removeCartItem);
 router.delete("/clearcart", Auth, clearCart);
 

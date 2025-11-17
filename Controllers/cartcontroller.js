@@ -5,41 +5,53 @@ const Product = require("../Models/productmodel");
 const addToCart = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { productId, quantity = 1, sizeId = null } = req.body;
+    const { productId, quantity = 1, sizeId = null, size = null } = req.body;
 
     const product = await Product.findById(productId);
-    if (!product) return res.status(404).json({ message: "Product not found" });
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
 
-    // 🔹 Determine the correct size and pricing
+    // ----- Base pricing -----
     let selectedSize = null;
     let price = product.price || 0;
     let discountedPrice = product.discountedPrice || price;
     let discountPercentage = product.discountPercentage || 0;
 
-    if (sizeId) {
-      // ✅ FIX: Compare with s._id, not s.size
-      selectedSize = product.sizes.find(
-        (s) => s._id.toString() === sizeId.toString()
-      );
+    // ----- Size Handling -----
+    if (sizeId || size) {
+      selectedSize = product.sizes.find((s) => {
+        return (
+          (sizeId && s._id.toString() === sizeId.toString()) ||
+          (size && s.size?.toLowerCase() === size.toLowerCase())
+        );
+      });
 
-      if (selectedSize) {
-        price = selectedSize.price || price;
-        discountedPrice = selectedSize.discountedPrice || discountedPrice;
-        discountPercentage =
-          selectedSize.discountPercentage || discountPercentage;
+      if (!selectedSize) {
+        return res.status(400).json({
+          message: `Invalid size selected for ${product.productName}`,
+        });
       }
+
+      price = selectedSize.price || price;
+      discountedPrice = selectedSize.discountedPrice || discountedPrice;
+      discountPercentage =
+        selectedSize.discountPercentage || discountPercentage;
     }
 
-    // 🔹 Find or create user cart
+    // ----- Find or create Cart -----
     let cart = await Cart.findOne({ user: userId });
-    if (!cart) cart = new Cart({ user: userId, items: [] });
+    if (!cart) {
+      cart = new Cart({ user: userId, items: [] });
+    }
 
-    // 🔹 Find existing item (match by product + size)
+    // ----- Check if same product + size already exists -----
     const existingItem = cart.items.find(
       (item) =>
         item.product.toString() === productId &&
-        ((sizeId && item.size?.toString() === sizeId) ||
-          (!sizeId && !item.size))
+        ((selectedSize &&
+          item.size?.toString() === selectedSize._id.toString()) ||
+          (!selectedSize && !item.size))
     );
 
     if (existingItem) {
@@ -50,7 +62,7 @@ const addToCart = async (req, res) => {
     } else {
       cart.items.push({
         product: productId,
-        size: sizeId || null,
+        size: selectedSize ? selectedSize._id : null,
         quantity,
         price,
         discountedPrice,
@@ -62,14 +74,14 @@ const addToCart = async (req, res) => {
 
     await cart.save();
 
-    // 🔹 Populate product & size for frontend clarity
-    const populatedCart = await cart.populate([
+    // ----- Populate -----
+    const populated = await cart.populate([
       { path: "items.product", select: "productName images" },
       { path: "items.size", select: "size" },
     ]);
 
-    // 🔹 Simplify response
-    const items = populatedCart.items.map((item) => ({
+    // ----- Simplify Response -----
+    const items = populated.items.map((item) => ({
       _id: item._id,
       productId: item.product._id,
       productName: item.productName || item.product.productName,
@@ -96,7 +108,10 @@ const addToCart = async (req, res) => {
 const getCart = async (req, res) => {
   try {
     const userId = req.user._id;
-    const cart = await Cart.findOne({ user: userId }).populate("items.product");
+
+    const cart = await Cart.findOne({ user: userId })
+      .populate("items.product", "productName images")
+      .populate("items.size", "size");
 
     if (!cart) return res.status(200).json({ items: [], totalPrice: 0 });
 
@@ -109,11 +124,13 @@ const getCart = async (req, res) => {
       price: item.price,
       discountedPrice: item.discountedPrice,
       discountPercentage: item.discountPercentage,
+      size: item.size ? item.size.size : null,
+      sizeId: item.size ? item.size._id : null,
     }));
 
     const totalPrice = items.reduce(
       (sum, item) =>
-        sum + (item.discountedPrice || item.price || 0) * (item.quantity || 1),
+        sum + (item.discountedPrice || item.price) * item.quantity,
       0
     );
 
@@ -124,7 +141,7 @@ const getCart = async (req, res) => {
   }
 };
 
-// 🔄 Update quantity by cartItemId
+// 🔄 Update quantity
 const updateCartItem = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -132,9 +149,9 @@ const updateCartItem = async (req, res) => {
     const { quantity } = req.body;
 
     if (!cartItemId || quantity == null)
-      return res
-        .status(400)
-        .json({ message: "Cart item ID and quantity required" });
+      return res.status(400).json({
+        message: "Cart item ID and quantity required",
+      });
 
     const cart = await Cart.findOne({ user: userId });
     if (!cart) return res.status(404).json({ message: "Cart not found" });
@@ -163,7 +180,7 @@ const updateCartItem = async (req, res) => {
   }
 };
 
-// ❌ Remove cart item
+// ❌ Remove item
 const removeCartItem = async (req, res) => {
   try {
     const userId = req.user._id;

@@ -3,24 +3,45 @@ const router = express.Router();
 const { Auth, adminMiddleware } = require("../middleware/requireauth");
 
 const {
-  placeOrder,
+  createRazorpayOrder,
+  verifyRazorpayPayment,
   getUserOrders,
   getOrderById,
   getAllOrders,
   updateOrderStatus,
   cancelOrder,
-  downloadInvoice,
+  downloadInvoice
 } = require("../Controllers/ordercontroller");
 
+
 // ================= USER ROUTES =================
-router.post("/placeorder", Auth, placeOrder);         // Place new order
-router.get("/myorders", Auth, getUserOrders);         // Get logged-in user's orders
-router.get("/userorders/:userID", Auth, getOrderById);      // Get single order by ID
-router.put("/cancelorder/:id", Auth, cancelOrder);    // Cancel order
-router.get("/invoice/:id", Auth, downloadInvoice);    // Download invoice (secured)
+
+// 🛒 Create Razorpay order
+router.post("/create-razorpay-order", Auth, createRazorpayOrder);
+
+// 🧾 Verify Razorpay payment
+router.post("/verify-payment", Auth, verifyRazorpayPayment);
+
+// 👤 Get logged-in user's orders
+router.get("/myorders", Auth, getUserOrders);
+
+// 📦 Get a single order by ID
+router.get("/order/:id", Auth, getOrderById);
+
+// ❌ Cancel order
+router.put("/cancel/:id", Auth, cancelOrder);
+
+// 🧾 Download invoice
+router.get("/invoice/:id", Auth, downloadInvoice);
+
 
 // ================= ADMIN ROUTES =================
-router.get("/getallorders", Auth, adminMiddleware, getAllOrders);    // All orders (admin)
-router.put("/status/:id", Auth, adminMiddleware, updateOrderStatus); // Update status (admin)
+
+// 🧾 Get all orders (Admin)
+router.get("/all", Auth, adminMiddleware, getAllOrders);
+
+// 🚚 Update order status (Admin)
+router.put("/status/:id", Auth, adminMiddleware, updateOrderStatus);
+
 
 module.exports = router;

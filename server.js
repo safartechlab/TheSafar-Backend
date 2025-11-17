@@ -16,6 +16,7 @@ const wishlistrouter = require("./Routers/wishlistrouter");
 const messagerouter = require("./Routers/messagerouter");
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 app.use("/user", userrouter);
 app.use("/category", catagoryrouter);

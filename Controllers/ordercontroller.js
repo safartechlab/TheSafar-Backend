@@ -36,7 +36,7 @@ const razorpay = new Razorpay({
 const generateInvoiceNumber = () => {
   const date = moment().format("YYYYMMDD");
   const random = Math.floor(10000 + Math.random() * 90000);
-  return `INV-${date}-${random}`;
+  return `INV-${random}`;
 };
 
 // Normalize size (handles populated object, id or string)

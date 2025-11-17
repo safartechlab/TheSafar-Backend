@@ -213,28 +213,26 @@ const getAllProducts = async (req, res) => {
     const { category, subcategory, query } = req.query;
     let filter = {};
 
-    // Category filter
+    // 🟢 Category filter
     if (category && category !== "All") filter.category = category;
 
-    // Subcategory filter
+    // 🟢 Subcategory filter
     if (subcategory && subcategory !== "All") filter.subcategory = subcategory;
 
-    // Query search: productName OR categoryname OR subcategoryname
-    if (query) {
-      const q = query.toLowerCase();
-      filter.$or = [
-        { productName: { $regex: q, $options: "i" } },
-        { subcategoryname: { $regex: q, $options: "i" } },
-        { "category.categoryname": { $regex: q, $options: "i" } }, // adjust if category is populated
-      ];
+    // 🔍 Search filter — only product name
+    if (query && query.trim() !== "") {
+      filter.productName = { $regex: query, $options: "i" };
     }
 
-    // Use correct reference field name
-    const products = await Product.find(filter).populate("category").populate("sizes.size");
+    // 🟢 Fetch products
+    const products = await Product.find(filter)
+      .populate("category")
+      .populate("subcategory")
+      .populate("sizes.size");
 
-    res.status(200).json({ data: products });
+    res.status(200).json({ success: true, data: products });
   } catch (error) {
-    console.error(error);
+    console.error("Error fetching products:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };

@@ -4,6 +4,7 @@ const Cart = require("../Models/cartmodel");
 const Product = require("../Models/productmodel");
 const puppeteer = require("puppeteer");
 const fs = require("fs");
+const fsp = fs.promises;
 const path = require("path");
 const moment = require("moment");
 const Razorpay = require("razorpay");
@@ -13,62 +14,69 @@ const crypto = require("crypto");
 const COMPANY_NAME = "TheSafarStore";
 const COMPANY_EMAIL = "thesafaronlinestore@gmail.com";
 const COMPANY_PHONE = "+91 99795-51975";
-const COMPANY_ADDRESS = "410, Adinath Arcade,HoneyPark road, Adajan, Surat, Gujarat - 395004";
+const COMPANY_ADDRESS =
+  "410, Adinath Arcade,HoneyPark road, Adajan, Surat, Gujarat - 395004";
 
-// Invoice tax percent (env override allowed)
 const INVOICE_TAX_PERCENT = parseFloat(process.env.INVOICE_TAX_PERCENT || "18");
 
-// Razorpay env
 const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || process.env.RAZORPAY_ID;
 const RAZORPAY_KEY_SECRET =
   process.env.RAZORPAY_KEY_SECRET || process.env.RAZORPAY_SECRET;
 
 if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
-  console.warn("⚠ Razorpay credentials missing");
+  console.warn("⚠ Razorpay credentials missing - payment endpoints will fail");
 }
 
-const razorpay = new Razorpay({
-  key_id: RAZORPAY_KEY_ID,
-  key_secret: RAZORPAY_KEY_SECRET,
-});
+const razorpay =
+  RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET
+    ? new Razorpay({
+        key_id: RAZORPAY_KEY_ID,
+        key_secret: RAZORPAY_KEY_SECRET,
+      })
+    : null;
 
 // ----------------- Helpers -----------------
 const generateInvoiceNumber = () => {
-  const date = moment().format("YYYYMMDD");
   const random = Math.floor(10000 + Math.random() * 90000);
   return `INV-${random}`;
 };
 
-// Normalize size (handles populated object, id or string)
 const normalizeSize = (sizeObjOrIdOrString) => {
-  if (!sizeObjOrIdOrString) return null;
+  if (!sizeObjOrIdOrString) return "N/A";
   if (typeof sizeObjOrIdOrString === "string") return sizeObjOrIdOrString;
-  if (sizeObjOrIdOrString.size) return sizeObjOrIdOrString.size;
-  if (sizeObjOrIdOrString._id && sizeObjOrIdOrString.size)
-    return sizeObjOrIdOrString.size;
+  if (typeof sizeObjOrIdOrString === "number") return String(sizeObjOrIdOrString);
+  if (typeof sizeObjOrIdOrString === "object") {
+    if ("size" in sizeObjOrIdOrString && sizeObjOrIdOrString.size)
+      return String(sizeObjOrIdOrString.size);
+    if (sizeObjOrIdOrString._id && typeof sizeObjOrIdOrString._id !== "object")
+      return String(sizeObjOrIdOrString._id);
+    try {
+      return String(sizeObjOrIdOrString.toString());
+    } catch {
+      return "N/A";
+    }
+  }
   return String(sizeObjOrIdOrString);
 };
 
-// Calculate totals: originalTotal, discountedTotal, totalDiscount, tax, payable
-const calculateTotals = (items) => {
+const calculateTotals = (items = []) => {
   let originalTotal = 0;
   let discountedTotal = 0;
   let totalDiscount = 0;
 
   items.forEach((it) => {
     const qty = Number(it.quantity || 1);
-    const discounted = Number(it.price || 0) * qty;
-    discountedTotal += discounted;
+    const charged = Number(it.price || 0) * qty;
+    discountedTotal += charged;
 
-    const original = Number(it.originalPrice ?? it.mrp ?? it.listPrice ?? it.price ?? 0);
+    const original =
+      Number(it.originalPrice ?? it.mrp ?? it.listPrice ?? it.price ?? 0);
     originalTotal += original * qty;
 
     totalDiscount += (original - Number(it.price || 0)) * qty;
   });
 
-  // When original isn't provided anywhere, treat originalTotal == discountedTotal and discount 0
-  const anyOriginalProvided = items.some((i) => i.originalPrice || i.mrp || i.listPrice);
-  if (!anyOriginalProvided) {
+  if (!items.some((i) => i.originalPrice || i.mrp || i.listPrice)) {
     originalTotal = discountedTotal;
     totalDiscount = 0;
   }
@@ -88,20 +96,24 @@ const calculateTotals = (items) => {
 // ----------------- Invoice PDF Generator -----------------
 const generateInvoice = async (order) => {
   const dir = path.join(__dirname, "../Invoices");
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  if (!fs.existsSync(dir)) await fsp.mkdir(dir, { recursive: true });
 
   const invoiceNumber = order.invoiceNumber || generateInvoiceNumber();
   order.invoiceNumber = invoiceNumber;
-  await order.save().catch(() => {}); // best-effort
 
-  // Build display items from order.items
+  try {
+    await order.save();
+  } catch (e) {
+    console.warn("Could not persist invoiceNumber on order:", e.message || e);
+  }
+
   const displayItems = (order.items || []).map((it) => {
     const qty = Number(it.quantity || 0);
-    const price = Number(it.price || 0); // charged price (discounted)
+    const price = Number(it.price || 0);
     const originalPrice = Number(it.originalPrice || it.mrp || it.listPrice || price);
     return {
       productName: it.productName || (it.product && it.product.productName) || "Item",
-      size: it.size || (it.size && it.size.size) || "N/A",
+      size: normalizeSize(it.size),
       quantity: qty,
       price,
       originalPrice,
@@ -112,7 +124,6 @@ const generateInvoice = async (order) => {
   const totals = calculateTotals(displayItems);
   const filePath = path.join(dir, `${invoiceNumber}.pdf`);
 
-  // Build rows HTML
   const rowsHtml = displayItems
     .map(
       (it, idx) => `
@@ -121,9 +132,15 @@ const generateInvoice = async (order) => {
       <td style="padding:8px; border:1px solid #ddd">${it.productName}</td>
       <td style="padding:8px; border:1px solid #ddd; text-align:center">${it.size}</td>
       <td style="padding:8px; border:1px solid #ddd; text-align:center">${it.quantity}</td>
-      <td style="padding:8px; border:1px solid #ddd; text-align:right">₹${it.originalPrice.toFixed(2)}</td>
-      <td style="padding:8px; border:1px solid #ddd; text-align:right">₹${it.price.toFixed(2)}</td>
-      <td style="padding:8px; border:1px solid #ddd; text-align:right">₹${it.total.toFixed(2)}</td>
+      <td style="padding:8px; border:1px solid #ddd; text-align:right">₹${it.originalPrice.toFixed(
+        2
+      )}</td>
+      <td style="padding:8px; border:1px solid #ddd; text-align:right">₹${it.price.toFixed(
+        2
+      )}</td>
+      <td style="padding:8px; border:1px solid #ddd; text-align:right">₹${it.total.toFixed(
+        2
+      )}</td>
     </tr>`
     )
     .join("");
@@ -161,7 +178,6 @@ const generateInvoice = async (order) => {
         <p><strong>Invoice No:</strong> ${invoiceNumber}</p>
         <p><strong>Date:</strong> ${moment(order.createdAt).format("DD/MM/YYYY")}</p>
       </div>
-
       <div>
         <p><strong>Customer:</strong> ${order.shippingAddress?.name || "-"}</p>
         <p><strong>Phone:</strong> ${order.shippingAddress?.phone || "-"}</p>
@@ -193,26 +209,11 @@ const generateInvoice = async (order) => {
 
     <div class="totals">
       <table>
-        <tr>
-          <td>Subtotal (Original):</td>
-          <td class="right">₹${totals.originalTotal.toFixed(2)}</td>
-        </tr>
-        <tr>
-          <td>Subtotal (Charged):</td>
-          <td class="right">₹${totals.discountedTotal.toFixed(2)}</td>
-        </tr>
-        <tr>
-          <td>Discount (You saved):</td>
-          <td class="right">- ₹${totals.totalDiscount.toFixed(2)}</td>
-        </tr>
-        <tr>
-          <td>Tax (${INVOICE_TAX_PERCENT}%):</td>
-          <td class="right">₹${totals.tax.toFixed(2)}</td>
-        </tr>
-        <tr>
-          <td style="font-weight:700">Payable Amount:</td>
-          <td class="right" style="font-weight:700">₹${totals.payable.toFixed(2)}</td>
-        </tr>
+        <tr><td>Subtotal (Original):</td><td class="right">₹${totals.originalTotal.toFixed(2)}</td></tr>
+        <tr><td>Subtotal (Charged):</td><td class="right">₹${totals.discountedTotal.toFixed(2)}</td></tr>
+        <tr><td>Discount (You saved):</td><td class="right">- ₹${totals.totalDiscount.toFixed(2)}</td></tr>
+        <tr><td>Tax (${INVOICE_TAX_PERCENT}%):</td><td class="right">₹${totals.tax.toFixed(2)}</td></tr>
+        <tr><td style="font-weight:700">Payable Amount:</td><td class="right" style="font-weight:700">₹${totals.payable.toFixed(2)}</td></tr>
       </table>
     </div>
 
@@ -223,28 +224,36 @@ const generateInvoice = async (order) => {
   </html>
   `;
 
-  const browser = await puppeteer.launch({ headless: "new" });
-  const page = await browser.newPage();
-  await page.setContent(html, { waitUntil: "networkidle0" });
-  await page.pdf({ path: filePath, format: "A4", printBackground: true });
-  await browser.close();
+  let browser;
+  try {
+    browser = await puppeteer.launch({
+      headless: true,
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    });
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "networkidle0" });
+    await page.pdf({ path: filePath, format: "A4", printBackground: true });
+  } finally {
+    if (browser) await browser.close().catch(() => {});
+  }
 
   return { filePath, invoiceNumber };
 };
 
 // ----------------- Controllers -----------------
 
-// Create Razorpay Order (server snapshot)
+// Razorpay order creation
 const createRazorpayOrder = async (req, res) => {
   try {
     const { amount, items = [], shippingAddress = {}, paymentMethod } = req.body;
-    const userId = req.user && (req.user.id || req.user._id);
+    const userId = req.user?.id || req.user?._id;
     if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
-    if (!amount || Number(amount) <= 0) return res.status(400).json({ success: false, message: "Invalid amount" });
 
-    if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
-      return res.status(500).json({ success: false, message: "Razorpay not configured on server" });
-    }
+    if (!amount || Number(amount) <= 0)
+      return res.status(400).json({ success: false, message: "Invalid amount" });
+
+    if (!razorpay)
+      return res.status(500).json({ success: false, message: "Razorpay not configured" });
 
     const razorpayOrder = await razorpay.orders.create({
       amount: Math.round(Number(amount) * 100),
@@ -252,11 +261,10 @@ const createRazorpayOrder = async (req, res) => {
       receipt: `rcpt_${Date.now()}`,
     });
 
-    // Map items into order items snapshot
-    const orderItems = (items || []).map((it) => ({
-      product: it.productId || it.product || undefined,
+    const orderItems = items.map((it) => ({
+      product: it.productId || it.product,
       productName: it.productName || it.name || "Item",
-      image: it.image || it.productImage || "",
+      image: it.image || "",
       price: Number(it.price || it.discountedPrice || it.mrp || 0),
       originalPrice: Number(it.originalPrice || it.mrp || it.listPrice || it.price || 0),
       quantity: Number(it.quantity || 1),
@@ -278,11 +286,11 @@ const createRazorpayOrder = async (req, res) => {
     res.status(200).json({ success: true, key: RAZORPAY_KEY_ID, order: razorpayOrder });
   } catch (error) {
     console.error("Create Razorpay Order Error:", error);
-    res.status(500).json({ success: false, message: "Server Error", error: error.message || error });
+    res.status(500).json({ success: false, message: error.message || "Server Error" });
   }
 };
 
-// Verify Razorpay Payment
+// Razorpay payment verification
 const verifyRazorpayPayment = async (req, res) => {
   try {
     const {
@@ -295,94 +303,83 @@ const verifyRazorpayPayment = async (req, res) => {
       paymentMethod = "Razorpay",
     } = req.body;
 
-    const userId = req.user && (req.user.id || req.user._id);
+    const userId = req.user?.id || req.user?._id;
     if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
 
-    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-      return res.status(400).json({ success: false, message: "Missing Razorpay payment fields" });
-    }
-
-    if (!RAZORPAY_KEY_SECRET) {
-      console.error("Razorpay secret missing on server");
-      return res.status(500).json({ success: false, message: "Server misconfiguration: Razorpay secret missing" });
-    }
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature)
+      return res.status(400).json({ success: false, message: "Missing payment fields" });
 
     const sign = razorpay_order_id + "|" + razorpay_payment_id;
-    const expectedSign = crypto.createHmac("sha256", RAZORPAY_KEY_SECRET).update(sign.toString()).digest("hex");
+    const expectedSign = crypto.createHmac("sha256", RAZORPAY_KEY_SECRET)
+      .update(sign.toString())
+      .digest("hex");
 
-    if (razorpay_signature !== expectedSign) {
+    if (razorpay_signature !== expectedSign)
       return res.status(400).json({ success: false, message: "Invalid payment signature" });
-    }
 
-    // Find the order created earlier (if any)
     let existingOrder = await Order.findOne({ razorpayOrderId: razorpay_order_id });
 
-    const itemsToSave = Array.isArray(cartItems) && cartItems.length
-      ? cartItems.map((it) => ({
-          product: it.productId || it.product || undefined,
-          productName: it.productName || it.name || "Item",
-          image: it.image || it.productImage || "",
-          price: Number(it.price || it.discountedPrice || it.mrp || 0),
-          originalPrice: Number(it.originalPrice || it.mrp || it.listPrice || it.price || 0),
-          quantity: Number(it.quantity || 1),
-          size: normalizeSize(it.size || it.sizeId || it.selectedSize),
-        }))
-      : [];
+    const itemsToSave = cartItems.map((it) => ({
+      product: it.productId || it.product,
+      productName: it.productName || it.name || "Item",
+      image: it.image || "",
+      price: Number(it.price || it.discountedPrice || it.mrp || 0),
+      originalPrice: Number(it.originalPrice || it.mrp || it.listPrice || it.price || 0),
+      quantity: Number(it.quantity || 1),
+      size: normalizeSize(it.size || it.sizeId || it.selectedSize),
+    }));
 
     if (!existingOrder) {
-      existingOrder = new Order({
+      existingOrder = await Order.create({
         user: userId,
         items: itemsToSave,
-        paymentMethod: paymentMethod || "Razorpay",
+        paymentMethod,
         shippingAddress: checkoutForm || {},
-        subtotal: Number(totalAmount) || 0,
-        totalPrice: Number(totalAmount) || 0,
+        subtotal: Number(totalAmount),
+        totalPrice: Number(totalAmount),
         razorpayOrderId: razorpay_order_id,
         paymentId: razorpay_payment_id,
         paymentStatus: "Paid",
-        status: "Received", // Received after successful payment
+        status: "Received",
         date: new Date(),
       });
-      await existingOrder.save();
     } else {
       existingOrder.paymentId = razorpay_payment_id;
       existingOrder.paymentStatus = "Paid";
       existingOrder.status = "Received";
       existingOrder.date = new Date();
-      existingOrder.paymentMethod = paymentMethod || existingOrder.paymentMethod || "Online";
+      existingOrder.paymentMethod = paymentMethod || existingOrder.paymentMethod;
 
       if (checkoutForm) existingOrder.shippingAddress = checkoutForm;
-      if (itemsToSave && itemsToSave.length) existingOrder.items = itemsToSave;
-
+      if (itemsToSave.length) existingOrder.items = itemsToSave;
       existingOrder.subtotal = Number(totalAmount) || existingOrder.subtotal;
       existingOrder.totalPrice = Number(totalAmount) || existingOrder.totalPrice;
 
       await existingOrder.save();
     }
 
-    // Clear user's cart after payment
-    await Cart.findOneAndUpdate({ user: userId }, { items: [] });
+    await Cart.findOneAndUpdate({ user: userId }, { items: [] }).catch(() => {});
 
-    res.status(200).json({ success: true, message: "Payment verified successfully", order: existingOrder });
+    res.status(200).json({
+      success: true,
+      message: "Payment verified successfully",
+      order: existingOrder,
+    });
   } catch (error) {
-    console.error("❌ Payment verification error:", error);
-    res.status(500).json({ success: false, message: "Payment verification failed", error: error.message || error });
+    console.error("Payment verification error:", error);
+    res.status(500).json({ success: false, message: error.message || "Verification failed" });
   }
 };
 
-// Download Invoice
+// Download invoice
 const downloadInvoice = async (req, res) => {
   try {
-    // populate product and size if stored as refs
-    const order = await Order.findById(req.params.id)
-      .populate("items.product")
-      .populate("items.size");
+    const order = await Order.findById(req.params.id).populate("items.product").populate("items.size");
     if (!order) return res.status(404).json({ message: "Order not found" });
 
     const { filePath, invoiceNumber } = await generateInvoice(order);
-
     res.download(filePath, `${invoiceNumber}.pdf`, (err) => {
-      if (err) console.error("Send invoice file error:", err);
+      if (err) console.error("Send invoice error:", err);
     });
   } catch (err) {
     console.error("Invoice download error:", err);
@@ -438,11 +435,14 @@ const cancelOrder = async (req, res) => {
     order.status = "Cancelled";
     await order.save();
 
-    // Restore stock where possible
+    // Restore stock
     for (const item of order.items) {
       try {
         if (item.size) {
-          await Product.updateOne({ _id: item.product, "sizes.size": item.size }, { $inc: { "sizes.$.stock": item.quantity } });
+          await Product.updateOne(
+            { _id: item.product, "sizes.size": item.size },
+            { $inc: { "sizes.$.stock": item.quantity } }
+          );
         } else {
           await Product.findByIdAndUpdate(item.product, { $inc: { stock: item.quantity } });
         }
@@ -458,15 +458,15 @@ const cancelOrder = async (req, res) => {
   }
 };
 
-// Place manual order (COD / non-razorpay)
+// Place manual order (COD / offline)
 const placeOrder = async (req, res) => {
   try {
     const { items = [], shippingAddress = {}, paymentMethod = "COD", subtotal = 0, totalPrice = 0 } = req.body;
-    const userId = req.user && (req.user.id || req.user._id);
+    const userId = req.user?.id || req.user?._id;
     if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
 
-    const normalizedItems = (items || []).map((it) => ({
-      product: it.productId || it.product || undefined,
+    const normalizedItems = items.map((it) => ({
+      product: it.productId || it.product,
       productName: it.productName || it.name || "Item",
       image: it.image || "",
       price: Number(it.price || it.discountedPrice || 0),
@@ -480,14 +480,14 @@ const placeOrder = async (req, res) => {
       items: normalizedItems,
       shippingAddress,
       paymentMethod,
-      subtotal: Number(subtotal) || 0,
-      totalPrice: Number(totalPrice) || 0,
+      subtotal: Number(subtotal),
+      totalPrice: Number(totalPrice),
       paymentStatus: paymentMethod === "COD" ? "Pending" : "Pending",
       status: paymentMethod === "COD" ? "Received" : "Pending",
     });
 
     await newOrder.save();
-    await Cart.findOneAndUpdate({ user: userId }, { items: [] });
+    await Cart.findOneAndUpdate({ user: userId }, { items: [] }).catch(() => {});
 
     res.status(201).json({ success: true, order: newOrder });
   } catch (err) {
@@ -496,7 +496,7 @@ const placeOrder = async (req, res) => {
   }
 };
 
-// getOrderById
+// Get order by ID
 const getOrderById = async (req, res) => {
   try {
     const order = await Order.findById(req.params.id).populate("items.product").populate("items.size");

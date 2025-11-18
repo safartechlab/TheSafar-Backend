@@ -10,7 +10,8 @@ const {
   getAllOrders,
   updateOrderStatus,
   cancelOrder,
-  downloadInvoice
+  downloadInvoice,
+  placeOrder
 } = require("../Controllers/ordercontroller");
 
 
@@ -24,6 +25,9 @@ router.post("/verify-payment", Auth, verifyRazorpayPayment);
 
 // 👤 Get logged-in user's orders
 router.get("/myorders", Auth, getUserOrders);
+
+
+router.post("/placeorder", Auth, placeOrder);
 
 // 📦 Get a single order by ID
 router.get("/order/:id", Auth, getOrderById);

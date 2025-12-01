@@ -20,6 +20,7 @@ const productSchema = new mongoose.Schema(
     sizes: [
       {
         size: { type: mongoose.Schema.Types.ObjectId, ref: "Size" },
+        sizeLabel: { type: String },
         price: { type: Number, min: 0 },
         stock: { type: Number, default: 0 },
         discountedPrice: { type: Number, default: null },
@@ -97,41 +98,25 @@ function calculateDiscountPercentage(price, discount, discountType) {
 }
 
 // Pre-save hook: calculate discounted values before saving
-productSchema.pre("save", function (next) {
-  if (this.price) {
-    this.discountedPrice = calculateDiscount(
-      this.price,
-      this.discount,
-      this.discountType
-    );
-    this.discountPercentage = calculateDiscountPercentage(
-      this.price,
-      this.discount,
-      this.discountType
-    );
-  }
-
+productSchema.pre("save", async function (next) {
   if (this.sizes && this.sizes.length > 0) {
-    this.sizes = this.sizes.map((s) => {
-      const discountedPrice = calculateDiscount(
-        s.price,
-        this.discount,
-        this.discountType
-      );
-      const discountPercentage = calculateDiscountPercentage(
-        s.price,
-        this.discount,
-        this.discountType
-      );
-      return {
-        ...(s.toObject?.() || s),
-        discountedPrice,
-        discountPercentage,
-      };
-    });
+    const Size = mongoose.model("Size");
+
+    this.sizes = await Promise.all(
+      this.sizes.map(async (s) => {
+        const sizeDoc = await Size.findById(s.size);
+        return {
+          ...(s.toObject?.() || s),
+          sizeLabel: sizeDoc?.size || null,
+          discountedPrice: calculateDiscount(s.price, this.discount, this.discountType),
+          discountPercentage: calculateDiscountPercentage(s.price, this.discount, this.discountType),
+        };
+      })
+    );
   }
 
   next();
 });
+
 
 module.exports = mongoose.model("Product", productSchema);

@@ -43,7 +43,7 @@ const updateSchema = Joi.object({
     area: Joi.string().optional(),
     city: Joi.string().optional(),
     state: Joi.string().optional(),
-    pincode: Joi.number().optional(),
+    pincode: Joi.number().optional(), 
   }).optional(),
 });
 

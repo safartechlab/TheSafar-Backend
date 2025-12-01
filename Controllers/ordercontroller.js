@@ -1,296 +1,278 @@
-// controllers/orderController.js
 const Order = require("../Models/ordermodel");
 const Cart = require("../Models/cartmodel");
 const Product = require("../Models/productmodel");
 const puppeteer = require("puppeteer");
 const fs = require("fs");
-const fsp = fs.promises;
 const path = require("path");
 const moment = require("moment");
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
 
-// ----------------- Company / Config -----------------
 const COMPANY_NAME = "TheSafarStore";
 const COMPANY_EMAIL = "thesafaronlinestore@gmail.com";
 const COMPANY_PHONE = "+91 99795-51975";
 const COMPANY_ADDRESS =
   "410, Adinath Arcade,HoneyPark road, Adajan, Surat, Gujarat - 395004";
 
-const INVOICE_TAX_PERCENT = parseFloat(process.env.INVOICE_TAX_PERCENT || "18");
-
 const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || process.env.RAZORPAY_ID;
 const RAZORPAY_KEY_SECRET =
   process.env.RAZORPAY_KEY_SECRET || process.env.RAZORPAY_SECRET;
 
-if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
-  console.warn("⚠ Razorpay credentials missing - payment endpoints will fail");
-}
+const razorpay = new Razorpay({
+  key_id: RAZORPAY_KEY_ID,
+  key_secret: RAZORPAY_KEY_SECRET,
+});
 
-const razorpay =
-  RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET
-    ? new Razorpay({
-        key_id: RAZORPAY_KEY_ID,
-        key_secret: RAZORPAY_KEY_SECRET,
-      })
-    : null;
+const generateInvoiceNumber = () =>
+  `INV-${Math.floor(10000 + Math.random() * 90000)}`;
 
-// ----------------- Helpers -----------------
-const generateInvoiceNumber = () => {
-  const random = Math.floor(10000 + Math.random() * 90000);
-  return `INV-${random}`;
-};
+const normalizeShippingAddress = (addr = {}) => ({
+  name: addr.name || "",
+  phone: addr.phone || "",
 
-const normalizeSize = (sizeObjOrIdOrString) => {
-  if (!sizeObjOrIdOrString) return "N/A";
-  if (typeof sizeObjOrIdOrString === "string") return sizeObjOrIdOrString;
-  if (typeof sizeObjOrIdOrString === "number") return String(sizeObjOrIdOrString);
-  if (typeof sizeObjOrIdOrString === "object") {
-    if ("size" in sizeObjOrIdOrString && sizeObjOrIdOrString.size)
-      return String(sizeObjOrIdOrString.size);
-    if (sizeObjOrIdOrString._id && typeof sizeObjOrIdOrString._id !== "object")
-      return String(sizeObjOrIdOrString._id);
-    try {
-      return String(sizeObjOrIdOrString.toString());
-    } catch {
-      return "N/A";
+  houseno: addr.houseno || addr.houseNo || addr.house || "",
+  street: addr.street || addr.address || "",
+  landmark: addr.landmark || addr.area || "",
+
+  city: addr.city || "",
+  state: addr.state || "",
+  pincode: addr.pincode || addr.zip || "",
+  country: addr.country || "India",
+});
+
+// ------------------ FIXED mapOrderItems ------------------
+const Size = require("../Models/sizemodel"); // make sure this import exists
+
+const mapOrderItems = async (items) => {
+  const updatedItems = [];
+
+  for (const it of items) {
+    let sizeName = "N/A";
+
+    // If sizeId exists, fetch size name from DB
+    if (it.sizeId || it.size?._id) {
+      const sizeDoc = await Size.findById(it.sizeId || it.size?._id).lean();
+      if (sizeDoc) {
+        sizeName = sizeDoc.size; // <-- IMPORTANT
+      }
     }
+
+    updatedItems.push({
+      productId: it.productId || it.product,
+      productName: it.productName,
+      image: it.image,
+
+      sizeId: it.sizeId || it.size?._id || null,
+      sizeName: sizeName, // <-- CORRECTED
+
+      price: it.price,
+      discountedPrice: it.discountedPrice || it.price,
+      quantity: it.quantity,
+      total: (it.discountedPrice || it.price) * it.quantity,
+    });
   }
-  return String(sizeObjOrIdOrString);
+
+  return updatedItems;
 };
 
 const calculateTotals = (items = []) => {
-  let originalTotal = 0;
-  let discountedTotal = 0;
-  let totalDiscount = 0;
+  let subtotal = 0;
+  let finalTotal = 0;
 
   items.forEach((it) => {
-    const qty = Number(it.quantity || 1);
-    const charged = Number(it.price || 0) * qty;
-    discountedTotal += charged;
-
-    const original =
-      Number(it.originalPrice ?? it.mrp ?? it.listPrice ?? it.price ?? 0);
-    originalTotal += original * qty;
-
-    totalDiscount += (original - Number(it.price || 0)) * qty;
+    subtotal += Number(it.price) * Number(it.quantity);
+    finalTotal += Number(it.discountedPrice) * Number(it.quantity);
   });
 
-  if (!items.some((i) => i.originalPrice || i.mrp || i.listPrice)) {
-    originalTotal = discountedTotal;
-    totalDiscount = 0;
-  }
-
-  const tax = Number(((discountedTotal * INVOICE_TAX_PERCENT) / 100).toFixed(2));
-  const payable = Number((discountedTotal + tax).toFixed(2));
-
   return {
-    originalTotal: Number(originalTotal.toFixed(2)),
-    discountedTotal: Number(discountedTotal.toFixed(2)),
-    totalDiscount: Number(totalDiscount.toFixed(2)),
-    tax,
-    payable,
+    subtotal: Number(subtotal.toFixed(2)),
+    totalPrice: Number(finalTotal.toFixed(2)),
+    discount: Number((subtotal - finalTotal).toFixed(2)),
   };
 };
 
-// ----------------- Invoice PDF Generator -----------------
 const generateInvoice = async (order) => {
   const dir = path.join(__dirname, "../Invoices");
-  if (!fs.existsSync(dir)) await fsp.mkdir(dir, { recursive: true });
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
   const invoiceNumber = order.invoiceNumber || generateInvoiceNumber();
   order.invoiceNumber = invoiceNumber;
+  await order.save().catch(() => {});
 
-  try {
-    await order.save();
-  } catch (e) {
-    console.warn("Could not persist invoiceNumber on order:", e.message || e);
-  }
-
-  const displayItems = (order.items || []).map((it) => {
-    const qty = Number(it.quantity || 0);
-    const price = Number(it.price || 0);
-    const originalPrice = Number(it.originalPrice || it.mrp || it.listPrice || price);
-    return {
-      productName: it.productName || (it.product && it.product.productName) || "Item",
-      size: normalizeSize(it.size),
-      quantity: qty,
-      price,
-      originalPrice,
-      total: Number((price * qty).toFixed(2)),
-    };
-  });
-
-  const totals = calculateTotals(displayItems);
-  const filePath = path.join(dir, `${invoiceNumber}.pdf`);
-
-  const rowsHtml = displayItems
+  const rows = order.items
     .map(
       (it, idx) => `
-    <tr>
-      <td style="padding:8px; border:1px solid #ddd; text-align:center">${idx + 1}</td>
-      <td style="padding:8px; border:1px solid #ddd">${it.productName}</td>
-      <td style="padding:8px; border:1px solid #ddd; text-align:center">${it.size}</td>
-      <td style="padding:8px; border:1px solid #ddd; text-align:center">${it.quantity}</td>
-      <td style="padding:8px; border:1px solid #ddd; text-align:right">₹${it.originalPrice.toFixed(
-        2
-      )}</td>
-      <td style="padding:8px; border:1px solid #ddd; text-align:right">₹${it.price.toFixed(
-        2
-      )}</td>
-      <td style="padding:8px; border:1px solid #ddd; text-align:right">₹${it.total.toFixed(
-        2
-      )}</td>
-    </tr>`
+        <tr>
+          <td>${idx + 1}</td>
+          <td>
+            <strong>${it.productName}</strong><br/>
+            <small>Size: ${it.sizeName || "N/A"}</small>
+          </td>
+          <td>${it.quantity}</td>
+          <td>₹${it.discountedPrice}</td>
+          <td>₹${it.total}</td>
+        </tr>
+      `
     )
     .join("");
 
   const html = `
-  <html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Invoice - ${invoiceNumber}</title>
-    <style>
-      body { font-family: Arial, sans-serif; padding: 24px; color: #222; }
-      .company { background:#033045; color:#fff; padding:16px; border-radius:8px; text-align:center }
-      .company h1 { margin:0; font-size:22px; letter-spacing:1px }
-      .meta { margin-top:12px; }
-      .flex { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; }
-      table { width:100%; border-collapse:collapse; margin-top:20px; font-size:13px; }
-      th, td { border:1px solid #ddd; padding:8px; }
-      th { background:#0077b6; color:#fff; text-transform:uppercase; font-size:12px; }
-      .right { text-align:right; }
-      .totals { width: 320px; margin-left:auto; margin-top:12px; }
-      .totals table { width:100%; border:none; }
-      .totals td { border:none; padding:6px 8px; }
-      .footer { margin-top:26px; text-align:center; color:#666; font-size:12px }
-    </style>
-  </head>
-  <body>
-    <div class="company">
-      <h1>${COMPANY_NAME}</h1>
-      <div class="meta">${COMPANY_EMAIL} | ${COMPANY_PHONE}</div>
-      <div class="meta">${COMPANY_ADDRESS}</div>
-    </div>
-
-    <div style="margin-top:16px" class="flex">
-      <div>
-        <p><strong>Invoice No:</strong> ${invoiceNumber}</p>
-        <p><strong>Date:</strong> ${moment(order.createdAt).format("DD/MM/YYYY")}</p>
+    <html>
+    <head>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 25px; color: #333; }
+        .header { text-align: center; margin-bottom: 20px; }
+        .company-info, .customer-info { background: #f8f8f8; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        .invoice-title { font-size: 22px; margin: 20px 0 10px 0; border-bottom: 2px solid #000; padding-bottom: 5px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        table th { background: #eee; padding: 10px; border: 1px solid #ccc; text-align: left; }
+        table td { padding: 10px; border: 1px solid #ddd; }
+        .summary { margin-top: 25px; padding: 15px; background: #fafafa; border-radius: 8px; width: 300px; float: right; font-size: 16px; }
+        .summary div { display: flex; justify-content: space-between; margin-bottom: 6px; }
+        .thanks { margin-top: 60px; text-align: center; font-size: 18px; }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>${COMPANY_NAME}</h1>
+        <p>${COMPANY_EMAIL} | ${COMPANY_PHONE}</p>
+        <p>${COMPANY_ADDRESS}</p>
       </div>
-      <div>
-        <p><strong>Customer:</strong> ${order.shippingAddress?.name || "-"}</p>
-        <p><strong>Phone:</strong> ${order.shippingAddress?.phone || "-"}</p>
-        <p><strong>Payment Method:</strong> ${order.paymentMethod || "-"}</p>
-        <p><strong>Payment Status:</strong> ${order.paymentStatus || "-"}</p>
+
+      <div class="invoice-title">INVOICE #${invoiceNumber}</div>
+      <p><strong>Date:</strong> ${moment(order.createdAt).format(
+        "DD/MM/YYYY"
+      )}</p>
+
+      <div class="customer-info">
+        <h3>Shipping Address</h3>
+        <p>
+          <strong>${order.shippingAddress.name}</strong><br/>
+          Phone: ${order.shippingAddress.phone}<br/><br/>
+          ${
+            order.shippingAddress.houseno
+              ? order.shippingAddress.houseno + ", "
+              : ""
+          }
+          ${
+            order.shippingAddress.street
+              ? order.shippingAddress.street + ", "
+              : ""
+          }
+          ${
+            order.shippingAddress.landmark
+              ? order.shippingAddress.landmark + ", "
+              : ""
+          }<br/>
+          ${order.shippingAddress.city}, ${order.shippingAddress.state} - ${
+    order.shippingAddress.pincode
+  }<br/>
+          ${order.shippingAddress.country}
+        </p>
       </div>
-    </div>
 
-    <h4>Shipping Address</h4>
-    <p>
-      ${order.shippingAddress?.houseno || ""} ${order.shippingAddress?.street || ""}<br>
-      ${order.shippingAddress?.landmark || ""}<br>
-      ${order.shippingAddress?.city || ""}, ${order.shippingAddress?.state || ""} - ${order.shippingAddress?.pincode || ""}<br>
-      ${order.shippingAddress?.country || ""}
-    </p>
+      <h3>Order Items</h3>
 
-    <table>
-      <tr>
-        <th>S.No</th>
-        <th>Product</th>
-        <th>Size</th>
-        <th>Qty</th>
-        <th>Original Price</th>
-        <th>Unit Price</th>
-        <th>Total</th>
-      </tr>
-      ${rowsHtml}
-    </table>
-
-    <div class="totals">
       <table>
-        <tr><td>Subtotal (Original):</td><td class="right">₹${totals.originalTotal.toFixed(2)}</td></tr>
-        <tr><td>Subtotal (Charged):</td><td class="right">₹${totals.discountedTotal.toFixed(2)}</td></tr>
-        <tr><td>Discount (You saved):</td><td class="right">- ₹${totals.totalDiscount.toFixed(2)}</td></tr>
-        <tr><td>Tax (${INVOICE_TAX_PERCENT}%):</td><td class="right">₹${totals.tax.toFixed(2)}</td></tr>
-        <tr><td style="font-weight:700">Payable Amount:</td><td class="right" style="font-weight:700">₹${totals.payable.toFixed(2)}</td></tr>
+        <tr>
+          <th>#</th>
+          <th>Product</th>
+          <th>Qty</th>
+          <th>Price</th>
+          <th>Total</th>
+        </tr>
+        ${rows}
       </table>
-    </div>
 
-    <div class="footer">
-      <p>Thank you for shopping with <strong>${COMPANY_NAME}</strong> 💙</p>
-    </div>
-  </body>
-  </html>
+      <div class="summary">
+        <div><span>Original Price:</span> <strong>₹${
+          order.subtotal
+        }</strong></div>
+        <div><span>Discount:</span> <strong>₹${order.discount}</strong></div>
+        <hr/>
+        <div style="font-size:18px;"><span>Payable Amount:</span> <strong>₹${
+          order.totalPrice
+        }</strong></div>
+      </div>
+
+      <div class="thanks">
+        Thank you for shopping with us 🙏<br/>
+        <small>Your support means a lot!</small>
+      </div>
+
+    </body>
+    </html>
   `;
 
-  let browser;
-  try {
-    browser = await puppeteer.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    });
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle0" });
-    await page.pdf({ path: filePath, format: "A4", printBackground: true });
-  } finally {
-    if (browser) await browser.close().catch(() => {});
-  }
+  const filePath = path.join(dir, `${invoiceNumber}.pdf`);
+  const browser = await puppeteer.launch({ headless: "new" });
+  const page = await browser.newPage();
+  await page.setContent(html, { waitUntil: "networkidle0" });
+  await page.pdf({ path: filePath, format: "A4", printBackground: true });
+  await browser.close();
 
   return { filePath, invoiceNumber };
 };
 
-// ----------------- Controllers -----------------
+// ------------------- Other Controllers -------------------
 
-// Razorpay order creation
 const createRazorpayOrder = async (req, res) => {
   try {
-    const { amount, items = [], shippingAddress = {}, paymentMethod } = req.body;
-    const userId = req.user?.id || req.user?._id;
-    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
+    const { amount: clientAmount, shippingAddress, paymentMethod } = req.body;
+    const userId = req.user.id;
 
-    if (!amount || Number(amount) <= 0)
-      return res.status(400).json({ success: false, message: "Invalid amount" });
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
-    if (!razorpay)
-      return res.status(500).json({ success: false, message: "Razorpay not configured" });
+    const cart = await Cart.findOne({ user: userId });
+    if (!cart || !cart.items.length) {
+      return res.status(400).json({ message: "Cart is empty" });
+    }
+    const mappedItems = await mapOrderItems(cart.items);
+    const totals = calculateTotals(mappedItems);
 
-    const razorpayOrder = await razorpay.orders.create({
-      amount: Math.round(Number(amount) * 100),
+    if (
+      clientAmount != null &&
+      Number(clientAmount).toFixed(2) !== totals.totalPrice.toFixed(2)
+    ) {
+      console.warn(
+        `Client amount mismatch. clientAmount=${clientAmount}, serverTotal=${totals.totalPrice}`
+      );
+    }
+
+    const rpOrder = await razorpay.orders.create({
+      amount: Math.round(Number(totals.totalPrice) * 100),
       currency: "INR",
-      receipt: `rcpt_${Date.now()}`,
+      receipt: "rcpt_" + Date.now(),
     });
 
-    const orderItems = items.map((it) => ({
-      product: it.productId || it.product,
-      productName: it.productName || it.name || "Item",
-      image: it.image || "",
-      price: Number(it.price || it.discountedPrice || it.mrp || 0),
-      originalPrice: Number(it.originalPrice || it.mrp || it.listPrice || it.price || 0),
-      quantity: Number(it.quantity || 1),
-      size: normalizeSize(it.size || it.sizeId || it.selectedSize),
-    }));
-
-    await Order.create({
+    const newOrder = await Order.create({
       user: userId,
-      items: orderItems,
+      items: mappedItems,
+      shippingAddress: normalizeShippingAddress(
+        shippingAddress || cart.shippingAddress || {}
+      ),
+      subtotal: totals.subtotal,
+      discount: totals.discount,
+      totalPrice: totals.totalPrice,
       paymentMethod: paymentMethod || "Razorpay",
-      shippingAddress,
-      subtotal: Number(amount),
-      totalPrice: Number(amount),
-      razorpayOrderId: razorpayOrder.id,
-      status: "Pending",
+      razorpayOrderId: rpOrder.id,
+      status: "Order Placed",
       paymentStatus: "Pending",
+      date: new Date(),
     });
 
-    res.status(200).json({ success: true, key: RAZORPAY_KEY_ID, order: razorpayOrder });
-  } catch (error) {
-    console.error("Create Razorpay Order Error:", error);
-    res.status(500).json({ success: false, message: error.message || "Server Error" });
+    res.json({
+      success: true,
+      key: RAZORPAY_KEY_ID,
+      order: rpOrder,
+      orderId: newOrder._id,
+    });
+  } catch (err) {
+    console.error("createRazorpayOrder error:", err);
+    res.status(500).json({ message: err.message || "Server error" });
   }
 };
 
-// Razorpay payment verification
 const verifyRazorpayPayment = async (req, res) => {
   try {
     const {
@@ -298,224 +280,191 @@ const verifyRazorpayPayment = async (req, res) => {
       razorpay_payment_id,
       razorpay_signature,
       checkoutForm,
-      cartItems = [],
-      totalAmount = 0,
-      paymentMethod = "Razorpay",
+      paymentMethod,
     } = req.body;
+    const userId = req.user.id;
 
-    const userId = req.user?.id || req.user?._id;
-    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
-    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature)
-      return res.status(400).json({ success: false, message: "Missing payment fields" });
-
-    const sign = razorpay_order_id + "|" + razorpay_payment_id;
-    const expectedSign = crypto.createHmac("sha256", RAZORPAY_KEY_SECRET)
-      .update(sign.toString())
+    const expectedSign = crypto
+      .createHmac("sha256", RAZORPAY_KEY_SECRET)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest("hex");
 
-    if (razorpay_signature !== expectedSign)
-      return res.status(400).json({ success: false, message: "Invalid payment signature" });
+    if (expectedSign !== razorpay_signature)
+      return res.status(400).json({ message: "Invalid payment signature" });
 
-    let existingOrder = await Order.findOne({ razorpayOrderId: razorpay_order_id });
+    const cart = await Cart.findOne({ user: userId });
+    const mappedItems = await mapOrderItems(cart ? cart.items : []);
+    const totals = calculateTotals(mappedItems);
 
-    const itemsToSave = cartItems.map((it) => ({
-      product: it.productId || it.product,
-      productName: it.productName || it.name || "Item",
-      image: it.image || "",
-      price: Number(it.price || it.discountedPrice || it.mrp || 0),
-      originalPrice: Number(it.originalPrice || it.mrp || it.listPrice || it.price || 0),
-      quantity: Number(it.quantity || 1),
-      size: normalizeSize(it.size || it.sizeId || it.selectedSize),
-    }));
+    let order = await Order.findOne({ razorpayOrderId: razorpay_order_id });
 
-    if (!existingOrder) {
-      existingOrder = await Order.create({
+    if (!order) {
+      order = new Order({
         user: userId,
-        items: itemsToSave,
-        paymentMethod,
-        shippingAddress: checkoutForm || {},
-        subtotal: Number(totalAmount),
-        totalPrice: Number(totalAmount),
+        items: mappedItems,
+        paymentMethod: paymentMethod || "Razorpay",
+        shippingAddress: normalizeShippingAddress(
+          checkoutForm || (cart && cart.shippingAddress) || {}
+        ),
+        subtotal: totals.subtotal,
+        discount: totals.discount,
+        totalPrice: totals.totalPrice,
         razorpayOrderId: razorpay_order_id,
         paymentId: razorpay_payment_id,
         paymentStatus: "Paid",
         status: "Received",
         date: new Date(),
       });
+      await order.save();
     } else {
-      existingOrder.paymentId = razorpay_payment_id;
-      existingOrder.paymentStatus = "Paid";
-      existingOrder.status = "Received";
-      existingOrder.date = new Date();
-      existingOrder.paymentMethod = paymentMethod || existingOrder.paymentMethod;
-
-      if (checkoutForm) existingOrder.shippingAddress = checkoutForm;
-      if (itemsToSave.length) existingOrder.items = itemsToSave;
-      existingOrder.subtotal = Number(totalAmount) || existingOrder.subtotal;
-      existingOrder.totalPrice = Number(totalAmount) || existingOrder.totalPrice;
-
-      await existingOrder.save();
+      order.items = mappedItems;
+      order.paymentId = razorpay_payment_id;
+      order.paymentMethod = paymentMethod || order.paymentMethod;
+      order.paymentStatus = "Paid";
+      order.status = "Received";
+      order.subtotal = totals.subtotal;
+      order.discount = totals.discount;
+      order.totalPrice = totals.totalPrice;
+      order.shippingAddress = normalizeShippingAddress(
+        checkoutForm || (cart && cart.shippingAddress) || order.shippingAddress
+      );
+      order.date = new Date();
+      await order.save();
     }
-
-    await Cart.findOneAndUpdate({ user: userId }, { items: [] }).catch(() => {});
+    await Cart.findOneAndUpdate({ user: userId }, { items: [] });
 
     res.status(200).json({
       success: true,
-      message: "Payment verified successfully",
-      order: existingOrder,
+      message: "Payment verified",
+      order,
     });
   } catch (error) {
     console.error("Payment verification error:", error);
-    res.status(500).json({ success: false, message: error.message || "Verification failed" });
-  }
-};
-
-// Download invoice
-const downloadInvoice = async (req, res) => {
-  try {
-    const order = await Order.findById(req.params.id).populate("items.product").populate("items.size");
-    if (!order) return res.status(404).json({ message: "Order not found" });
-
-    const { filePath, invoiceNumber } = await generateInvoice(order);
-    res.download(filePath, `${invoiceNumber}.pdf`, (err) => {
-      if (err) console.error("Send invoice error:", err);
+    res.status(500).json({
+      message: "Payment verification failed",
+      error: error.message || error,
     });
-  } catch (err) {
-    console.error("Invoice download error:", err);
-    res.status(500).json({ message: "Server error" });
   }
 };
 
-// Get user orders
-const getUserOrders = async (req, res) => {
+const placeOrder = async (req, res) => {
   try {
-    const orders = await Order.find({ user: req.user.id }).sort({ createdAt: -1 });
-    res.json({ success: true, count: orders.length, orders });
-  } catch (err) {
-    console.error("Get user orders error:", err);
-    res.status(500).json({ message: "Server error" });
-  }
-};
+    const { items, shippingAddress } = req.body;
 
-// Get all orders (admin)
-const getAllOrders = async (req, res) => {
-  try {
-    const orders = await Order.find().populate("user").sort({ createdAt: -1 });
-    res.json({ success: true, count: orders.length, orders });
-  } catch (err) {
-    console.error("Get all orders error:", err);
-    res.status(500).json({ message: "Server error" });
-  }
-};
+    const mappedItems = await mapOrderItems(items);
+    const totals = calculateTotals(mappedItems);
 
-// Update order status (admin)
-const updateOrderStatus = async (req, res) => {
-  try {
-    const { status } = req.body;
-    const valid = ["Received", "Confirmed", "Rejected", "Shipped", "Delivered", "Cancelled"];
-    if (!valid.includes(status)) return res.status(400).json({ message: "Invalid status" });
+    const order = await Order.create({
+      user: req.user.id,
+      items: mappedItems,
+      shippingAddress: normalizeShippingAddress(shippingAddress),
+      subtotal: totals.subtotal,
+      discount: totals.discount,
+      totalPrice: totals.totalPrice,
+      paymentMethod: "COD",
+      paymentStatus: "Pending",
+      status: "Received",
+      date: new Date(),
+    });
 
-    const updated = await Order.findByIdAndUpdate(req.params.id, { status }, { new: true });
-    if (!updated) return res.status(404).json({ message: "Order not found" });
-    res.json({ success: true, updated });
+    await Cart.findOneAndUpdate({ user: req.user.id }, { items: [] });
+
+    res.status(201).json({ success: true, order });
   } catch (error) {
-    console.error("Update order status error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Failed to place order", error });
   }
 };
 
-// Cancel order
-const cancelOrder = async (req, res) => {
+const downloadInvoice = async (req, res) => {
   try {
     const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ message: "Order not found" });
-    if (order.status === "Delivered") return res.status(400).json({ message: "Delivered order cannot be cancelled" });
 
-    order.status = "Cancelled";
-    await order.save();
+    const { filePath, invoiceNumber } = await generateInvoice(order);
 
-    // Restore stock
-    for (const item of order.items) {
-      try {
-        if (item.size) {
-          await Product.updateOne(
-            { _id: item.product, "sizes.size": item.size },
-            { $inc: { "sizes.$.stock": item.quantity } }
-          );
-        } else {
-          await Product.findByIdAndUpdate(item.product, { $inc: { stock: item.quantity } });
-        }
-      } catch (e) {
-        console.warn("Failed to restore stock for", item.product, e.message || e);
-      }
+    res.download(filePath, `${invoiceNumber}.pdf`);
+  } catch (err) {
+    res.status(500).json({ message: "Invoice error", err });
+  }
+};
+
+const getUserOrders = async (req, res) => {
+  const orders = await Order.find({ user: req.user.id }).sort({
+    createdAt: -1,
+  });
+  res.json({ success: true, orders });
+};
+
+const getAllOrders = async (req, res) => {
+  const orders = await Order.find().populate("user").sort({ createdAt: -1 });
+  res.json({ success: true, orders });
+};
+
+const updateOrderStatus = async (req, res) => {
+  const valid = [
+    "Received",
+    "Confirmed",
+    "Shipped",
+    "Delivered",
+    "Rejected",
+    "Cancelled",
+  ];
+  if (!valid.includes(req.body.status))
+    return res.status(400).json({ message: "Invalid status" });
+
+  const updated = await Order.findByIdAndUpdate(
+    req.params.id,
+    { status: req.body.status },
+    { new: true }
+  );
+
+  res.json({ success: true, updated });
+};
+
+const cancelOrder = async (req, res) => {
+  const order = await Order.findById(req.params.id);
+  if (!order) return res.status(404).json({ message: "Order not found" });
+  if (order.status === "Delivered")
+    return res
+      .status(400)
+      .json({ message: "Delivered order can't be cancelled" });
+
+  order.status = "Cancelled";
+  await order.save();
+
+  for (const item of order.items) {
+    if (item.sizeId) {
+      await Product.updateOne(
+        { _id: item.product, "sizes._id": item.sizeId },
+        { $inc: { "sizes.$.stock": item.quantity } }
+      );
+    } else {
+      await Product.findByIdAndUpdate(item.product, {
+        $inc: { stock: item.quantity },
+      });
     }
-
-    res.json({ success: true, order });
-  } catch (err) {
-    console.error("Cancel order error:", err);
-    res.status(500).json({ message: "Server error" });
   }
+
+  res.json({ success: true, order });
 };
 
-// Place manual order (COD / offline)
-const placeOrder = async (req, res) => {
-  try {
-    const { items = [], shippingAddress = {}, paymentMethod = "COD", subtotal = 0, totalPrice = 0 } = req.body;
-    const userId = req.user?.id || req.user?._id;
-    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
-
-    const normalizedItems = items.map((it) => ({
-      product: it.productId || it.product,
-      productName: it.productName || it.name || "Item",
-      image: it.image || "",
-      price: Number(it.price || it.discountedPrice || 0),
-      originalPrice: Number(it.originalPrice || it.mrp || it.listPrice || it.price || 0),
-      quantity: Number(it.quantity || 1),
-      size: normalizeSize(it.size || it.sizeId || it.selectedSize),
-    }));
-
-    const newOrder = new Order({
-      user: userId,
-      items: normalizedItems,
-      shippingAddress,
-      paymentMethod,
-      subtotal: Number(subtotal),
-      totalPrice: Number(totalPrice),
-      paymentStatus: paymentMethod === "COD" ? "Pending" : "Pending",
-      status: paymentMethod === "COD" ? "Received" : "Pending",
-    });
-
-    await newOrder.save();
-    await Cart.findOneAndUpdate({ user: userId }, { items: [] }).catch(() => {});
-
-    res.status(201).json({ success: true, order: newOrder });
-  } catch (err) {
-    console.error("Place order error:", err);
-    res.status(500).json({ success: false, message: "Failed to place order" });
-  }
-};
-
-// Get order by ID
 const getOrderById = async (req, res) => {
-  try {
-    const order = await Order.findById(req.params.id).populate("items.product").populate("items.size");
-    if (!order) return res.status(404).json({ message: "Order not found" });
-    res.json({ success: true, order });
-  } catch (error) {
-    console.error("Get order by id error:", error);
-    res.status(500).json({ message: "Server error" });
-  }
+  const order = await Order.findById(req.params.id)
+    .populate("items.product")
+    .populate("items.sizeId");
+  res.json({ success: true, order });
 };
 
 module.exports = {
   placeOrder,
   verifyRazorpayPayment,
+  createRazorpayOrder,
   downloadInvoice,
   getUserOrders,
   getAllOrders,
   updateOrderStatus,
   cancelOrder,
   getOrderById,
-  createRazorpayOrder,
 };

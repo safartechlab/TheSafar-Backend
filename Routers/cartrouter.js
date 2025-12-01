@@ -6,7 +6,7 @@ const {
   updateCartItem,
   removeCartItem,
   clearCart,
-} = require("../Controllers/cartcontroller");
+} = require("../Controllers/cartcontoller");
 const { Auth } = require("../middleware/requireauth");
 
 router.post("/addtocart", Auth, addToCart);

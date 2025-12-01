@@ -7,7 +7,6 @@ const orderSchema = new mongoose.Schema(
       unique: true,
       required: true,
       default: function () {
-        // deterministic-ish unique value: time + random
         return `ORD-${Date.now()}-${Math.floor(Math.random() * 90000 + 10000)}`;
       },
     },
@@ -17,11 +16,18 @@ const orderSchema = new mongoose.Schema(
         product: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
         productName: String,
         image: String,
-        price: Number,
+
+        sizeId: { type: mongoose.Schema.Types.ObjectId, ref: "Size", default: null },
+        sizeName: String,
+
+        price: Number, // original price
+        discountedPrice: Number, // paid price
+        discountPercentage: Number,
         quantity: Number,
-        size: String,
+        total: Number, // total for this item (discountedPrice * quantity)
       },
     ],
+
     shippingAddress: {
       name: String,
       phone: String,
@@ -33,13 +39,16 @@ const orderSchema = new mongoose.Schema(
       pincode: String,
       country: String,
     },
-    subtotal: Number,
-    totalPrice: Number,
+
+    subtotal: Number, // sum of original prices * qty
+    discount: Number, // subtotal - totalPrice
+    totalPrice: Number, // sum of discountedPrice * qty
+
     paymentId: String,
     razorpayOrderId: String,
     paymentMethod: String,
     paymentStatus: { type: String, default: "Pending" },
-    status: { type: String, default: "Processing" },
+    status: { type: String, default: "Order Placed" },
     invoiceNumber: String,
     date: Date,
   },

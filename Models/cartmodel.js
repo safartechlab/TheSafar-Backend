@@ -17,7 +17,11 @@ const cartSchema = new mongoose.Schema(
         size: {
           type: mongoose.Schema.Types.ObjectId,
           ref: "Size",
-          default: null, // optional
+          default: null,
+        },
+        sizeLabel: {
+          type: String, // 🟢 store plain size (S, M, L)
+          default: null,
         },
         quantity: {
           type: Number,
@@ -26,11 +30,11 @@ const cartSchema = new mongoose.Schema(
           default: 1,
         },
         price: {
-          type: Number, // actual price at the time of adding to cart
+          type: Number,
           required: true,
         },
         discountedPrice: {
-          type: Number, // discounted price at the time of adding
+          type: Number,
           default: null,
         },
         discountPercentage: {

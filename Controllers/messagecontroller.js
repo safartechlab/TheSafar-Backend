@@ -1,4 +1,5 @@
 const Message = require("../Models/messagemodel");
+const { Sendmail } = require("../Utilities/nodemailer");
 
 // Create a new message
 const createMessage = async (req, res) => {
@@ -29,7 +30,7 @@ const getAllMessages = async (req, res) => {
 };
 
 // Get single message by ID
- const getMessageById = async (req, res) => {
+const getMessageById = async (req, res) => {
   try {
     const message = await Message.findById(req.params.id);
     if (!message) return res.status(404).json({ error: "Message not found" });
@@ -55,22 +56,63 @@ const updateMessage = async (req, res) => {
   }
 };
 
-
+// Delete message
 const deleteMessage = async (req, res) => {
   try {
-    const deletedMessage = await Message.findByIdAndDelete(req.params.id);
-    if (!deletedMessage)
+    const { id } = req.params;
+
+    console.log("Deleting message ID:", id);
+
+    const deletedMsg = await Message.findByIdAndDelete(id);
+
+    if (!deletedMsg) {
       return res.status(404).json({ error: "Message not found" });
-    res.status(200).json({ message: "Message deleted successfully" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    }
+
+    return res.status(200).json({ message: "Message deleted successfully" });
+  } catch (error) {
+    console.error("❌ Delete Error:", error);
+    return res.status(500).json({ error: "Internal server error" });
   }
 };
 
-module.exports ={
-    createMessage,
-    getAllMessages,
-    updateMessage,
-    deleteMessage,
-    getMessageById
-}
+const replyToUser = async (req, res) => {
+  try {
+    const {
+      messageId,
+      replyMessage,
+      subject = "Reply from Support",
+    } = req.body;
+
+    const userMessage = await Message.findById(messageId);
+    if (!userMessage) {
+      return res.status(404).json({ error: "Message not found" });
+    }
+
+    const htmlContent = `
+      <p>Hi ${userMessage.name},</p>
+      <p>${replyMessage}</p>
+      <p>Regards,<br/>Safar Team</p>
+    `;
+
+    // Use the utility instead of transporter directly
+    await Sendmail(userMessage.email, subject, htmlContent);
+
+    userMessage.reply = replyMessage;
+    await userMessage.save();
+
+    res.status(200).json({ message: "Reply sent successfully!" });
+  } catch (err) {
+    console.error("Reply error:", err);
+    res.status(500).json({ error: "Failed to send reply" });
+  }
+};
+
+module.exports = {
+  createMessage,
+  getAllMessages,
+  updateMessage,
+  deleteMessage,
+  getMessageById,
+  replyToUser,
+};

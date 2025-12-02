@@ -6,12 +6,15 @@ const {
   updateMessage,
   deleteMessage,
   getMessageById,
+  replyToUser
 } = require("../Controllers/messagecontroller");
 
 const { Auth } = require("../middleware/requireauth");
 
 // Create a new message
 router.post("/sendmessage", Auth, createMessage);
+
+router.post("/reply", Auth, replyToUser)
 
 // Get all messages
 router.get("/getmessage", Auth, getAllMessages);

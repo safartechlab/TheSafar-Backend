@@ -17,7 +17,11 @@ const orderSchema = new mongoose.Schema(
         productName: String,
         image: String,
 
-        sizeId: { type: mongoose.Schema.Types.ObjectId, ref: "Size", default: null },
+        sizeId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Size",
+          default: null,
+        },
         sizeName: String,
 
         price: Number, // original price
@@ -51,6 +55,10 @@ const orderSchema = new mongoose.Schema(
     status: { type: String, default: "Order Placed" },
     invoiceNumber: String,
     date: Date,
+    rejectReason: {
+      type: String,
+      default: null,
+    },
   },
   { timestamps: true }
 );

@@ -458,15 +458,18 @@ const downloadInvoice = async (req, res) => {
 
 const getUserOrders = async (req, res) => {
   try {
-    const orders = await Order.find({ user: req.user.id }).sort({
-      createdAt: -1,
-    });
-    res.json({ success: true, orders });
+    const orders = await Order.find({ user: req.user.id })
+      .sort({ createdAt: -1 })
+      .populate("items.product") // populate product info for each item
+      .populate("user", "username email"); // optional: user info
+
+    res.json({ success: true, orders }); // rejectReason is included automatically
   } catch (err) {
     console.error("getUserOrders error:", err);
     res.status(500).json({ message: "Failed to fetch orders", err });
   }
 };
+
 
 const getAllOrders = async (req, res) => {
   try {
@@ -488,19 +491,36 @@ const updateOrderStatus = async (req, res) => {
       "Rejected",
       "Cancelled",
     ];
-    if (!valid.includes(req.body.status))
-      return res.status(400).json({ message: "Invalid status" });
 
-    const updated = await Order.findByIdAndUpdate(
-      req.params.id,
-      { status: req.body.status },
-      { new: true }
-    );
+    const { status, rejectReason } = req.body; // <-- extract from request
+
+    if (!valid.includes(status)) {
+      return res.status(400).json({ message: "Invalid status" });
+    }
+
+    const updateFields = { status };
+
+    // If rejected, include rejectReason
+    if (status === "Rejected") {
+      updateFields.rejectReason = rejectReason || "No reason provided";
+    } else {
+      updateFields.rejectReason = null; // clear any previous reason if not rejected
+    }
+
+    const updated = await Order.findByIdAndUpdate(req.params.id, updateFields, {
+      new: true,
+    });
+
+    if (!updated) {
+      return res.status(404).json({ message: "Order not found" });
+    }
 
     res.json({ success: true, updated });
   } catch (err) {
     console.error("updateOrderStatus error:", err);
-    res.status(500).json({ message: "Failed to update status", err });
+    res
+      .status(500)
+      .json({ message: "Failed to update status", error: err.message });
   }
 };
 

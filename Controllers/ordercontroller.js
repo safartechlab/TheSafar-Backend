@@ -1,6 +1,8 @@
+// controllers/orderController.js
 const Order = require("../Models/ordermodel");
 const Cart = require("../Models/cartmodel");
 const Product = require("../Models/productmodel");
+const Size = require("../Models/sizemodel"); // <-- ADDED
 const puppeteer = require("puppeteer");
 const fs = require("fs");
 const path = require("path");
@@ -40,35 +42,59 @@ const normalizeShippingAddress = (addr = {}) => ({
   country: addr.country || "India",
 });
 
-// ------------------ FIXED mapOrderItems ------------------
-const Size = require("../Models/sizemodel"); // make sure this import exists
-
 const mapOrderItems = async (items) => {
   const updatedItems = [];
 
   for (const it of items) {
-    let sizeName = "N/A";
+    const productId = it.productId || it.product;
+    const productDoc = await Product.findById(productId).lean();
 
-    // If sizeId exists, fetch size name from DB
-    if (it.sizeId || it.size?._id) {
-      const sizeDoc = await Size.findById(it.sizeId || it.size?._id).lean();
-      if (sizeDoc) {
-        sizeName = sizeDoc.size; // <-- IMPORTANT
+    // Extract size info from cart
+    const sizeId = it.size || it.sizeId || null;
+    const sizeName = it.sizeLabel || it.sizeName || null;
+
+    let finalSizeName = sizeName;
+
+    // If still not found, fetch from product or Size model
+    if (!finalSizeName && sizeId) {
+      const sizeObj = productDoc?.sizes?.find(
+        (s) => String(s._id) === String(sizeId)
+      );
+
+      if (sizeObj) {
+        finalSizeName = sizeObj.sizeLabel || sizeObj.size || null;
+      } else {
+        const sizeDoc = await Size.findById(sizeId)
+          .lean()
+          .catch(() => null);
+        finalSizeName = sizeDoc?.size || null;
       }
     }
 
     updatedItems.push({
-      productId: it.productId || it.product,
-      productName: it.productName,
-      image: it.image,
+      product: productId,
+      productName:
+        it.productName || productDoc?.productName || productDoc?.name || "",
 
-      sizeId: it.sizeId || it.size?._id || null,
-      sizeName: sizeName, // <-- CORRECTED
+      image:
+        it.image ||
+        productDoc?.images?.[0]?.filepath ||
+        productDoc?.images?.[0]?.url,
 
-      price: it.price,
-      discountedPrice: it.discountedPrice || it.price,
-      quantity: it.quantity,
-      total: (it.discountedPrice || it.price) * it.quantity,
+      // 🔥 MOST IMPORTANT FIX
+      sizeId: sizeId || null,
+      sizeName: finalSizeName || "N/A",
+
+      price: Number(it.price || 0),
+      discountedPrice: Number(
+        it.discountedPrice != null ? it.discountedPrice : it.price || 0
+      ),
+      quantity: Number(it.quantity || 1),
+      discountPercentage: Number(it.discountPercentage || 0),
+
+      total: Number(
+        ((it.discountedPrice || it.price) * (it.quantity || 1)).toFixed(2)
+      ),
     });
   }
 
@@ -80,8 +106,8 @@ const calculateTotals = (items = []) => {
   let finalTotal = 0;
 
   items.forEach((it) => {
-    subtotal += Number(it.price) * Number(it.quantity);
-    finalTotal += Number(it.discountedPrice) * Number(it.quantity);
+    subtotal += Number(it.price || 0) * Number(it.quantity || 0);
+    finalTotal += Number(it.discountedPrice || 0) * Number(it.quantity || 0);
   });
 
   return {
@@ -218,18 +244,41 @@ const generateInvoice = async (order) => {
 
 const createRazorpayOrder = async (req, res) => {
   try {
-    const { amount: clientAmount, shippingAddress, paymentMethod } = req.body;
+    const {
+      amount: clientAmount,
+      shippingAddress,
+      paymentMethod,
+      items,
+      isBuyNow,
+    } = req.body;
     const userId = req.user.id;
 
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
-    const cart = await Cart.findOne({ user: userId });
-    if (!cart || !cart.items.length) {
-      return res.status(400).json({ message: "Cart is empty" });
-    }
-    const mappedItems = await mapOrderItems(cart.items);
-    const totals = calculateTotals(mappedItems);
+    let mappedItems = [];
+    let totals = { subtotal: 0, discount: 0, totalPrice: 0 };
 
+    // -----------------------------------------------
+    // BUY NOW MODE
+    // -----------------------------------------------
+    if (isBuyNow && Array.isArray(items) && items.length > 0) {
+      mappedItems = await mapOrderItems(items);
+      totals = calculateTotals(mappedItems);
+    } else {
+      // -----------------------------------------------
+      // NORMAL CART CHECKOUT
+      // -----------------------------------------------
+      const cart = await Cart.findOne({ user: userId });
+
+      if (!cart || !cart.items.length) {
+        return res.status(400).json({ message: "Cart is empty" });
+      }
+
+      mappedItems = await mapOrderItems(cart.items);
+      totals = calculateTotals(mappedItems);
+    }
+
+    // Amount mismatch check
     if (
       clientAmount != null &&
       Number(clientAmount).toFixed(2) !== totals.totalPrice.toFixed(2)
@@ -239,18 +288,18 @@ const createRazorpayOrder = async (req, res) => {
       );
     }
 
+    // Razorpay order create
     const rpOrder = await razorpay.orders.create({
-      amount: Math.round(Number(totals.totalPrice) * 100),
+      amount: Math.round(totals.totalPrice * 100),
       currency: "INR",
       receipt: "rcpt_" + Date.now(),
     });
 
+    // Create order entry
     const newOrder = await Order.create({
       user: userId,
       items: mappedItems,
-      shippingAddress: normalizeShippingAddress(
-        shippingAddress || cart.shippingAddress || {}
-      ),
+      shippingAddress: normalizeShippingAddress(shippingAddress),
       subtotal: totals.subtotal,
       discount: totals.discount,
       totalPrice: totals.totalPrice,
@@ -261,7 +310,7 @@ const createRazorpayOrder = async (req, res) => {
       date: new Date(),
     });
 
-    res.json({
+    return res.json({
       success: true,
       key: RAZORPAY_KEY_ID,
       order: rpOrder,
@@ -269,7 +318,7 @@ const createRazorpayOrder = async (req, res) => {
     });
   } catch (err) {
     console.error("createRazorpayOrder error:", err);
-    res.status(500).json({ message: err.message || "Server error" });
+    return res.status(500).json({ message: err.message || "Server error" });
   }
 };
 
@@ -281,11 +330,14 @@ const verifyRazorpayPayment = async (req, res) => {
       razorpay_signature,
       checkoutForm,
       paymentMethod,
+      items,
+      isBuyNow,
     } = req.body;
-    const userId = req.user.id;
 
+    const userId = req.user.id;
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
+    // Validate Razorpay signature
     const expectedSign = crypto
       .createHmac("sha256", RAZORPAY_KEY_SECRET)
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
@@ -294,10 +346,22 @@ const verifyRazorpayPayment = async (req, res) => {
     if (expectedSign !== razorpay_signature)
       return res.status(400).json({ message: "Invalid payment signature" });
 
-    const cart = await Cart.findOne({ user: userId });
-    const mappedItems = await mapOrderItems(cart ? cart.items : []);
-    const totals = calculateTotals(mappedItems);
+    // Decide item source
+    let mappedItems = [];
+    let totals = {};
 
+    if (isBuyNow && Array.isArray(items) && items.length > 0) {
+      // BUY NOW
+      mappedItems = await mapOrderItems(items);
+      totals = calculateTotals(mappedItems);
+    } else {
+      // CART CHECKOUT
+      const cart = await Cart.findOne({ user: userId });
+      mappedItems = await mapOrderItems(cart ? cart.items : []);
+      totals = calculateTotals(mappedItems);
+    }
+
+    // Update order
     let order = await Order.findOne({ razorpayOrderId: razorpay_order_id });
 
     if (!order) {
@@ -305,9 +369,7 @@ const verifyRazorpayPayment = async (req, res) => {
         user: userId,
         items: mappedItems,
         paymentMethod: paymentMethod || "Razorpay",
-        shippingAddress: normalizeShippingAddress(
-          checkoutForm || (cart && cart.shippingAddress) || {}
-        ),
+        shippingAddress: normalizeShippingAddress(checkoutForm),
         subtotal: totals.subtotal,
         discount: totals.discount,
         totalPrice: totals.totalPrice,
@@ -321,30 +383,28 @@ const verifyRazorpayPayment = async (req, res) => {
     } else {
       order.items = mappedItems;
       order.paymentId = razorpay_payment_id;
-      order.paymentMethod = paymentMethod || order.paymentMethod;
       order.paymentStatus = "Paid";
       order.status = "Received";
       order.subtotal = totals.subtotal;
       order.discount = totals.discount;
       order.totalPrice = totals.totalPrice;
-      order.shippingAddress = normalizeShippingAddress(
-        checkoutForm || (cart && cart.shippingAddress) || order.shippingAddress
-      );
-      order.date = new Date();
+      order.shippingAddress = normalizeShippingAddress(checkoutForm);
       await order.save();
     }
-    await Cart.findOneAndUpdate({ user: userId }, { items: [] });
 
-    res.status(200).json({
+    // Only clear cart for normal checkout
+    if (!isBuyNow) await Cart.findOneAndUpdate({ user: userId }, { items: [] });
+
+    return res.status(200).json({
       success: true,
       message: "Payment verified",
       order,
     });
   } catch (error) {
     console.error("Payment verification error:", error);
-    res.status(500).json({
+    return res.status(500).json({
       message: "Payment verification failed",
-      error: error.message || error,
+      error: error.message,
     });
   }
 };
@@ -352,6 +412,10 @@ const verifyRazorpayPayment = async (req, res) => {
 const placeOrder = async (req, res) => {
   try {
     const { items, shippingAddress } = req.body;
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: "No items provided" });
+    }
 
     const mappedItems = await mapOrderItems(items);
     const totals = calculateTotals(mappedItems);
@@ -373,6 +437,7 @@ const placeOrder = async (req, res) => {
 
     res.status(201).json({ success: true, order });
   } catch (error) {
+    console.error("placeOrder error:", error);
     res.status(500).json({ message: "Failed to place order", error });
   }
 };
@@ -386,75 +451,101 @@ const downloadInvoice = async (req, res) => {
 
     res.download(filePath, `${invoiceNumber}.pdf`);
   } catch (err) {
+    console.error("downloadInvoice error:", err);
     res.status(500).json({ message: "Invoice error", err });
   }
 };
 
 const getUserOrders = async (req, res) => {
-  const orders = await Order.find({ user: req.user.id }).sort({
-    createdAt: -1,
-  });
-  res.json({ success: true, orders });
+  try {
+    const orders = await Order.find({ user: req.user.id }).sort({
+      createdAt: -1,
+    });
+    res.json({ success: true, orders });
+  } catch (err) {
+    console.error("getUserOrders error:", err);
+    res.status(500).json({ message: "Failed to fetch orders", err });
+  }
 };
 
 const getAllOrders = async (req, res) => {
-  const orders = await Order.find().populate("user").sort({ createdAt: -1 });
-  res.json({ success: true, orders });
+  try {
+    const orders = await Order.find().populate("user").sort({ createdAt: -1 });
+    res.json({ success: true, orders });
+  } catch (err) {
+    console.error("getAllOrders error:", err);
+    res.status(500).json({ message: "Failed to fetch all orders", err });
+  }
 };
 
 const updateOrderStatus = async (req, res) => {
-  const valid = [
-    "Received",
-    "Confirmed",
-    "Shipped",
-    "Delivered",
-    "Rejected",
-    "Cancelled",
-  ];
-  if (!valid.includes(req.body.status))
-    return res.status(400).json({ message: "Invalid status" });
+  try {
+    const valid = [
+      "Received",
+      "Confirmed",
+      "Shipped",
+      "Delivered",
+      "Rejected",
+      "Cancelled",
+    ];
+    if (!valid.includes(req.body.status))
+      return res.status(400).json({ message: "Invalid status" });
 
-  const updated = await Order.findByIdAndUpdate(
-    req.params.id,
-    { status: req.body.status },
-    { new: true }
-  );
+    const updated = await Order.findByIdAndUpdate(
+      req.params.id,
+      { status: req.body.status },
+      { new: true }
+    );
 
-  res.json({ success: true, updated });
+    res.json({ success: true, updated });
+  } catch (err) {
+    console.error("updateOrderStatus error:", err);
+    res.status(500).json({ message: "Failed to update status", err });
+  }
 };
 
 const cancelOrder = async (req, res) => {
-  const order = await Order.findById(req.params.id);
-  if (!order) return res.status(404).json({ message: "Order not found" });
-  if (order.status === "Delivered")
-    return res
-      .status(400)
-      .json({ message: "Delivered order can't be cancelled" });
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (order.status === "Delivered")
+      return res
+        .status(400)
+        .json({ message: "Delivered order can't be cancelled" });
 
-  order.status = "Cancelled";
-  await order.save();
+    order.status = "Cancelled";
+    await order.save();
 
-  for (const item of order.items) {
-    if (item.sizeId) {
-      await Product.updateOne(
-        { _id: item.product, "sizes._id": item.sizeId },
-        { $inc: { "sizes.$.stock": item.quantity } }
-      );
-    } else {
-      await Product.findByIdAndUpdate(item.product, {
-        $inc: { stock: item.quantity },
-      });
+    for (const item of order.items) {
+      if (item.sizeId) {
+        await Product.updateOne(
+          { _id: item.product, "sizes._id": item.sizeId },
+          { $inc: { "sizes.$.stock": item.quantity } }
+        );
+      } else {
+        await Product.findByIdAndUpdate(item.product, {
+          $inc: { stock: item.quantity },
+        });
+      }
     }
-  }
 
-  res.json({ success: true, order });
+    res.json({ success: true, order });
+  } catch (err) {
+    console.error("cancelOrder error:", err);
+    res.status(500).json({ message: "Failed to cancel order", err });
+  }
 };
 
 const getOrderById = async (req, res) => {
-  const order = await Order.findById(req.params.id)
-    .populate("items.product")
-    .populate("items.sizeId");
-  res.json({ success: true, order });
+  try {
+    const order = await Order.findById(req.params.id)
+      .populate("items.product")
+      .populate("items.sizeId");
+    res.json({ success: true, order });
+  } catch (err) {
+    console.error("getOrderById error:", err);
+    res.status(500).json({ message: "Failed to fetch order", err });
+  }
 };
 
 module.exports = {

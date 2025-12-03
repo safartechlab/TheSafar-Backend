@@ -143,92 +143,193 @@ const generateInvoice = async (order) => {
     .join("");
 
   const html = `
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; padding: 25px; color: #333; }
-        .header { text-align: center; margin-bottom: 20px; }
-        .company-info, .customer-info { background: #f8f8f8; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-        .invoice-title { font-size: 22px; margin: 20px 0 10px 0; border-bottom: 2px solid #000; padding-bottom: 5px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        table th { background: #eee; padding: 10px; border: 1px solid #ccc; text-align: left; }
-        table td { padding: 10px; border: 1px solid #ddd; }
-        .summary { margin-top: 25px; padding: 15px; background: #fafafa; border-radius: 8px; width: 300px; float: right; font-size: 16px; }
-        .summary div { display: flex; justify-content: space-between; margin-bottom: 6px; }
-        .thanks { margin-top: 60px; text-align: center; font-size: 18px; }
-      </style>
-    </head>
-    <body>
-      <div class="header">
-        <h1>${COMPANY_NAME}</h1>
-        <p>${COMPANY_EMAIL} | ${COMPANY_PHONE}</p>
-        <p>${COMPANY_ADDRESS}</p>
-      </div>
+<html>
+<head>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      padding: 30px;
+      color: #444;
+      background: #f4f6f8;
+    }
 
-      <div class="invoice-title">INVOICE #${invoiceNumber}</div>
-      <p><strong>Date:</strong> ${moment(order.createdAt).format(
-        "DD/MM/YYYY"
-      )}</p>
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
 
-      <div class="customer-info">
-        <h3>Shipping Address</h3>
-        <p>
-          <strong>${order.shippingAddress.name}</strong><br/>
-          Phone: ${order.shippingAddress.phone}<br/><br/>
-          ${
-            order.shippingAddress.houseno
-              ? order.shippingAddress.houseno + ", "
-              : ""
-          }
-          ${
-            order.shippingAddress.street
-              ? order.shippingAddress.street + ", "
-              : ""
-          }
-          ${
-            order.shippingAddress.landmark
-              ? order.shippingAddress.landmark + ", "
-              : ""
-          }<br/>
-          ${order.shippingAddress.city}, ${order.shippingAddress.state} - ${
+    .header h1 {
+      font-size: 28px;
+      color: #1f2937;
+      margin-bottom: 5px;
+    }
+
+    .header p {
+      font-size: 14px;
+      color: #6b7280;
+      margin: 2px 0;
+    }
+
+    .invoice-title {
+      font-size: 24px;
+      font-weight: 600;
+      color: #111827;
+      margin: 30px 0 15px;
+      border-bottom: 3px solid #3b82f6;
+      padding-bottom: 5px;
+    }
+
+    .company-info, .customer-info {
+      background: #ffffff;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      margin-bottom: 25px;
+    }
+
+    .company-info h3, .customer-info h3 {
+      margin-bottom: 12px;
+      color: #1f2937;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+      background: #fff;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+
+    table th {
+      background: #3b82f6;
+      color: #fff;
+      font-weight: 600;
+      padding: 12px;
+      text-align: left;
+    }
+
+    table td {
+      padding: 12px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .summary {
+      margin-top: 30px;
+      padding: 20px;
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      width: 320px;
+      float: right;
+      font-size: 16px;
+    }
+
+    .summary div {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .summary hr {
+      border: none;
+      border-top: 1px solid #e5e7eb;
+      margin: 10px 0;
+    }
+
+    .summary div.total {
+      font-size: 18px;
+      font-weight: 600;
+      color: #1f2937;
+    }
+
+    .thanks {
+      margin-top: 100px;
+      text-align: center;
+      font-size: 18px;
+      color: #1f2937;
+    }
+
+    .thanks small {
+      display: block;
+      margin-top: 5px;
+      color: #6b7280;
+    }
+
+    /* Clear float */
+    .clearfix::after {
+      content: "";
+      clear: both;
+      display: table;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>${COMPANY_NAME}</h1>
+    <p>${COMPANY_EMAIL} | ${COMPANY_PHONE}</p>
+    <p>${COMPANY_ADDRESS}</p>
+  </div>
+
+  <div class="invoice-title">INVOICE #${invoiceNumber}</div>
+  <p><strong>Date:</strong> ${moment(order.createdAt).format("DD/MM/YYYY")}</p>
+
+  <div class="customer-info">
+    <h3>Shipping Address</h3>
+    <p>
+      <strong>${order.shippingAddress.name}</strong><br/>
+      Phone: ${order.shippingAddress.phone}<br/><br/>
+      ${
+        order.shippingAddress.houseno
+          ? order.shippingAddress.houseno + ", "
+          : ""
+      }${
+    order.shippingAddress.street ? order.shippingAddress.street + ", " : ""
+  }${
+    order.shippingAddress.landmark ? order.shippingAddress.landmark + ", " : ""
+  }<br/>
+      ${order.shippingAddress.city}, ${order.shippingAddress.state} - ${
     order.shippingAddress.pincode
   }<br/>
-          ${order.shippingAddress.country}
-        </p>
-      </div>
+      ${order.shippingAddress.country}
+    </p>
+  </div>
 
-      <h3>Order Items</h3>
+  <h3>Order Items</h3>
 
-      <table>
-        <tr>
-          <th>#</th>
-          <th>Product</th>
-          <th>Qty</th>
-          <th>Price</th>
-          <th>Total</th>
-        </tr>
-        ${rows}
-      </table>
+  <table>
+    <tr>
+      <th>#</th>
+      <th>Product</th>
+      <th>Qty</th>
+      <th>Price</th>
+      <th>Total</th>
+    </tr>
+    ${rows}
+  </table>
 
-      <div class="summary">
-        <div><span>Original Price:</span> <strong>₹${
-          order.subtotal
-        }</strong></div>
-        <div><span>Discount:</span> <strong>₹${order.discount}</strong></div>
-        <hr/>
-        <div style="font-size:18px;"><span>Payable Amount:</span> <strong>₹${
-          order.totalPrice
-        }</strong></div>
-      </div>
+  <div class="summary clearfix">
+    <div><span>Original Price:</span> <strong>₹${order.subtotal}</strong></div>
+    <div><span>Discount:</span> <strong>₹${order.discount}</strong></div>
+    <hr/>
+    <div class="total"><span>Payable Amount:</span> <strong>₹${
+      order.totalPrice
+    }</strong></div>
+  </div>
 
-      <div class="thanks">
-        Thank you for shopping with us 🙏<br/>
-        <small>Your support means a lot!</small>
-      </div>
+  <div class="thanks">
+    Thank you for shopping with us 🙏<br/>
+    <small>Your support means a lot!</small>
+  </div>
 
-    </body>
-    </html>
-  `;
+</body>
+</html>
+`;
 
   const filePath = path.join(dir, `${invoiceNumber}.pdf`);
   const browser = await puppeteer.launch({ headless: "new" });
@@ -337,7 +438,9 @@ const verifyRazorpayPayment = async (req, res) => {
     const userId = req.user.id;
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
-    // Validate Razorpay signature
+    // ----------------------
+    // 1. Validate Razorpay signature
+    // ----------------------
     const expectedSign = crypto
       .createHmac("sha256", RAZORPAY_KEY_SECRET)
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
@@ -346,22 +449,53 @@ const verifyRazorpayPayment = async (req, res) => {
     if (expectedSign !== razorpay_signature)
       return res.status(400).json({ message: "Invalid payment signature" });
 
-    // Decide item source
+    // ----------------------
+    // 2. Map items and calculate totals
+    // ----------------------
     let mappedItems = [];
     let totals = {};
 
     if (isBuyNow && Array.isArray(items) && items.length > 0) {
-      // BUY NOW
       mappedItems = await mapOrderItems(items);
       totals = calculateTotals(mappedItems);
     } else {
-      // CART CHECKOUT
       const cart = await Cart.findOne({ user: userId });
       mappedItems = await mapOrderItems(cart ? cart.items : []);
       totals = calculateTotals(mappedItems);
     }
 
-    // Update order
+    if (!mappedItems.length)
+      return res.status(400).json({ message: "No items to process" });
+
+    // ----------------------
+    // 3. Validate stock availability
+    // ----------------------
+    for (const item of mappedItems) {
+      const product = await Product.findById(item.product).lean();
+      if (!product)
+        return res.status(404).json({ message: "Product not found" });
+
+      if (item.sizeId) {
+        const sizeObj = product.sizes.find(
+          (s) => String(s._id) === String(item.sizeId)
+        );
+        if (!sizeObj || sizeObj.stock < item.quantity) {
+          return res.status(400).json({
+            message: `Not enough stock for ${item.productName} (${
+              sizeObj?.sizeLabel || "N/A"
+            })`,
+          });
+        }
+      } else if ((product.stock || 0) < item.quantity) {
+        return res
+          .status(400)
+          .json({ message: `Not enough stock for ${item.productName}` });
+      }
+    }
+
+    // ----------------------
+    // 4. Create or update order
+    // ----------------------
     let order = await Order.findOne({ razorpayOrderId: razorpay_order_id });
 
     if (!order) {
@@ -392,12 +526,32 @@ const verifyRazorpayPayment = async (req, res) => {
       await order.save();
     }
 
-    // Only clear cart for normal checkout
-    if (!isBuyNow) await Cart.findOneAndUpdate({ user: userId }, { items: [] });
+    // ----------------------
+    // 5. Decrease stock after order is saved
+    // ----------------------
+    for (const item of mappedItems) {
+      if (item.sizeId) {
+        await Product.updateOne(
+          { _id: item.product, "sizes._id": item.sizeId },
+          { $inc: { "sizes.$.stock": -item.quantity } }
+        );
+      } else {
+        await Product.findByIdAndUpdate(item.product, {
+          $inc: { stock: -item.quantity },
+        });
+      }
+    }
+
+    // ----------------------
+    // 6. Clear cart for normal checkout
+    // ----------------------
+    if (!isBuyNow) {
+      await Cart.findOneAndUpdate({ user: userId }, { items: [] });
+    }
 
     return res.status(200).json({
       success: true,
-      message: "Payment verified",
+      message: "Payment verified and stock updated",
       order,
     });
   } catch (error) {
@@ -417,9 +571,39 @@ const placeOrder = async (req, res) => {
       return res.status(400).json({ message: "No items provided" });
     }
 
+    // Map items and calculate totals
     const mappedItems = await mapOrderItems(items);
     const totals = calculateTotals(mappedItems);
 
+    // ----------------------
+    // 1. Validate stock
+    // ----------------------
+    for (const item of mappedItems) {
+      const product = await Product.findById(item.product).lean();
+      if (!product)
+        return res.status(404).json({ message: "Product not found" });
+
+      if (item.sizeId) {
+        const sizeObj = product.sizes.find(
+          (s) => String(s._id) === String(item.sizeId)
+        );
+        if (!sizeObj || sizeObj.stock < item.quantity) {
+          return res.status(400).json({
+            message: `Not enough stock for ${item.productName} (${
+              sizeObj?.sizeLabel || "N/A"
+            })`,
+          });
+        }
+      } else if ((product.stock || 0) < item.quantity) {
+        return res
+          .status(400)
+          .json({ message: `Not enough stock for ${item.productName}` });
+      }
+    }
+
+    // ----------------------
+    // 2. Create order
+    // ----------------------
     const order = await Order.create({
       user: req.user.id,
       items: mappedItems,
@@ -433,6 +617,25 @@ const placeOrder = async (req, res) => {
       date: new Date(),
     });
 
+    // ----------------------
+    // 3. Decrease stock
+    // ----------------------
+    for (const item of mappedItems) {
+      if (item.sizeId) {
+        await Product.updateOne(
+          { _id: item.product, "sizes._id": item.sizeId },
+          { $inc: { "sizes.$.stock": -item.quantity } }
+        );
+      } else {
+        await Product.findByIdAndUpdate(item.product, {
+          $inc: { stock: -item.quantity },
+        });
+      }
+    }
+
+    // ----------------------
+    // 4. Clear cart
+    // ----------------------
     await Cart.findOneAndUpdate({ user: req.user.id }, { items: [] });
 
     res.status(201).json({ success: true, order });
@@ -469,7 +672,6 @@ const getUserOrders = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch orders", err });
   }
 };
-
 
 const getAllOrders = async (req, res) => {
   try {
